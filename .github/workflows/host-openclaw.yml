@@ -13,52 +13,51 @@ jobs:
     name: OpenClaw behind trycloudflare tunnel
     runs-on: ubuntu-22.04
     timeout-minutes: 150  # 150 min hard cap
+    env:
+      # Resolve nvm once at job level so every step shares the same Node.
+      NVM_DIR: "$HOME/.nvm"
+      PATH: "$HOME/.npm-global/bin:$HOME/.nvm/versions/node/v26/bin:$HOME/.local/bin:$PATH"
 
     steps:
-      # ── 1. Install dependencies ──
+      # ── 1. Install system dependencies ──
       - name: Install system dependencies
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq curl git build-essential python3 unzip
+          sudo apt-get update
+          sudo apt-get install -y curl git build-essential python3 unzip
 
-      # ── 2. Install nvm, Node 26 ──
+      # ── 2. Install nvm + Node 26 ──
       - name: Setup Node 26
         run: |
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-          export NVM_DIR="$HOME/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-          nvm install 26 && nvm use 26 && nvm alias default 26
-          npm install -g npm@latest --no-audit --no-fund
+          . "$NVM_DIR/nvm.sh"
+          nvm install 26
+          nvm use 26
+          nvm alias default 26
+          # nuke any globalconfig/prefix that breaks nvm (the exit-code-11 trap)
+          nvm use --delete-prefix 26 --silent 2>/dev/null || nvm use 26
+          npx --version
+          node --version
 
-      # ── 3. Install openclaw locally ──
-      - name: Install openclaw locally
+      # ── 3. Install openclaw ──
+      - name: Install openclaw
         run: |
-          export PATH="$HOME/.npm-global/bin:$PATH"
-          # Install openclaw with prefix to $HOME/.npm-global (no system symlinks)
-          npm install openclaw@latest --prefix "$HOME/.npm-global" --no-audit --no-fund
+          . "$NVM_DIR/nvm.sh" && nvm use 26
+          npm install -g npm@latest
+          npm install openclaw@latest
 
       # ── 4. Write identity/workspace files ──
       - name: Write identity files
         run: |
           mkdir -p "$HOME/.openclaw/agents/main/sessions"
-          
-          # Create workspace dir with identity files so OpenClaw knows who it is
           WORKSPACE_DIR="$HOME/openclaw-workspace"
           mkdir -p "$WORKSPACE_DIR"
-          
           cat > "$WORKSPACE_DIR/SOUL.md" << 'SOUL'
-          # SOUL.md - Who You Are
+          # SOUL.md
           Be genuinely helpful. Have opinions. Be resourceful. Earn trust through competence.
           SOUL
-
           cat > "$WORKSPACE_DIR/IDENTITY.md" << 'IDENT'
-          # IDENTITY.md
-          - Name: Leon AI 5 (LA5)
-          - Creature: Fifth-generation AI agent
-          - Vibe: Direct, resourceful, execution-first.
-          - Emoji: 🥒
+          # IDENTITY.md - Leon AI 5 (LA5), 5th-gen agent, vibe: direct/execution-first, emoji 🥒
           IDENT
-
           cat > "$WORKSPACE_DIR/USER.md" << 'USER'
           # USER.md - About Your Human
           - Name: Leon
@@ -66,11 +65,9 @@ jobs:
           - Pronouns: he/him
           - Timezone: UTC+3 (East Africa)
           USER
-
           cat > "$WORKSPACE_DIR/MEMORY.md" << 'MEM'
           # MEMORY.md
-          This is a temporary OpenClaw instance running on GitHub Actions.
-          It serves as a browser-accessible gateway to Leon AI 5 (LA5).
+          Temporary OpenClaw instance on GitHub Actions, behind a trycloudflare tunnel.
           MEM
 
       # ── 5. Generate openclaw.json config ──
@@ -81,26 +78,16 @@ jobs:
           SESSION_KEY: '${{ secrets.SESSION_KEY }}'
         run: |
           WORKSPACE_DIR="$HOME/openclaw-workspace"
-          
-          # Clear any npm config that may conflict with nvm
-          npm config delete prefix 2>/dev/null || true
-          
           cat > "$HOME/.openclaw/openclaw.json" << JSONEOF
           {
             "gateway": {
               "mode": "local",
               "port": 18789,
               "bind": "loopback",
-              "auth": {
-                "mode": "token",
-                "token": "${OPENCLAW_TOKEN}"
-              },
+              "auth": { "mode": "token", "token": "$OPENCLAW_TOKEN" },
               "tailscale": { "mode": "off", "resetOnExit": false },
               "controlUi": {
-                "allowedOrigins": [
-                  "http://localhost:18789",
-                  "http://127.0.0.1:18789"
-                ],
+                "allowedOrigins": ["http://localhost:18789", "http://127.0.0.1:18789"],
                 "dangerouslyAllowHostHeaderOriginFallback": true,
                 "allowInsecureAuth": true,
                 "dangerouslyDisableDeviceAuth": true
@@ -109,9 +96,7 @@ jobs:
             "agents": {
               "defaults": {
                 "workspace": "$WORKSPACE_DIR",
-                "model": {
-                  "primary": "oc-hy3-free/hy3-free"
-                },
+                "model": { "primary": "oc-hy3-free/hy3-free" },
                 "timeoutSeconds": 86400
               }
             },
@@ -121,136 +106,110 @@ jobs:
                 "oc-hy3-free": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "${OPENCODE_API_KEY}",
+                  "apiKey": "$OPENCODE_API_KEY",
                   "timeoutSeconds": 86400,
-                  "models": [
-                    {
-                      "id": "hy3-free",
-                      "name": "oc/hy3-free (Primary)",
-                      "contextWindow": 128000,
-                      "maxTokens": 4096,
-                      "input": ["text"],
-                      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-                      "reasoning": false
-                    }
-                  ]
+                  "models": [{
+                    "id": "hy3-free", "name": "oc/hy3-free (Primary)",
+                    "contextWindow": 128000, "maxTokens": 4096,
+                    "input": ["text"],
+                    "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+                    "reasoning": false
+                  }]
                 },
                 "oc-nemotron-3.5-lightning-free": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "${OPENCODE_API_KEY}",
+                  "apiKey": "$OPENCODE_API_KEY",
                   "timeoutSeconds": 86400,
-                  "models": [
-                    {
-                      "id": "nemotron-3.5-lightning-free",
-                      "name": "oc/nemotron-3.5-lightning-free (Fast)",
-                      "contextWindow": 128000,
-                      "maxTokens": 4096,
-                      "input": ["text"],
-                      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-                      "reasoning": false
-                    }
-                  ]
+                  "models": [{
+                    "id": "nemotron-3.5-lightning-free", "name": "oc/nemotron-3.5-lightning-free (Fast)",
+                    "contextWindow": 128000, "maxTokens": 4096,
+                    "input": ["text"],
+                    "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+                    "reasoning": false
+                  }]
                 },
                 "oc-laguna-s-2.1-free": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "${OPENCODE_API_KEY}",
+                  "apiKey": "$OPENCODE_API_KEY",
                   "timeoutSeconds": 86400,
-                  "models": [
-                    {
-                      "id": "laguna-s-2.1-free",
-                      "name": "oc/laguna-s-2.1-free (Fallback)",
-                      "contextWindow": 128000,
-                      "maxTokens": 4096,
-                      "input": ["text"],
-                      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-                      "reasoning": false
-                    }
-                  ]
+                  "models": [{
+                    "id": "laguna-s-2.1-free", "name": "oc/laguna-s-2.1-free (Fallback)",
+                    "contextWindow": 128000, "maxTokens": 4096,
+                    "input": ["text"],
+                    "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+                    "reasoning": false
+                  }]
                 },
                 "custom-opencode-ai": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "${OPENCODE_API_KEY}",
+                  "apiKey": "$OPENCODE_API_KEY",
                   "timeoutSeconds": 86400,
-                  "models": [
-                    {
-                      "id": "big-pickle",
-                      "name": "big-pickle (Last Resort)",
-                      "contextWindow": 200000,
-                      "maxTokens": 16384,
-                      "input": ["text"],
-                      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-                      "reasoning": false
-                    }
-                  ]
+                  "models": [{
+                    "id": "big-pickle", "name": "big-pickle (Last Resort)",
+                    "contextWindow": 200000, "maxTokens": 16384,
+                    "input": ["text"],
+                    "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+                    "reasoning": false
+                  }]
                 }
               }
             },
-            "session": {
-              "dmScope": "per-channel-peer"
-            },
-            "tools": {
-              "profile": "coding"
-            }
+            "session": { "dmScope": "per-channel-peer" },
+            "tools": { "profile": "coding" }
           }
           JSONEOF
-          
-          echo "Config written to $HOME/.openclaw/openclaw.json"
+          # validate JSON
+          python3 -c "import json; json.load(open('$HOME/.openclaw/openclaw.json')); print('Config OK')"
 
       # ── 6. Start OpenClaw gateway ──
       - name: Start OpenClaw gateway
         run: |
-          export NVM_DIR="$HOME/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-          export PATH="$HOME/.npm-global/bin:$PATH"
+          . "$NVM_DIR/nvm.sh" && nvm use --delete-prefix 26 --silent 2>/dev/null || nvm use 26
           cd "$HOME/.openclaw"
-          # Clear npm config conflicts before starting gateway
-          npm config delete prefix 2>/dev/null || true
           nohup openclaw gateway > /tmp/openclaw-gateway.log 2>&1 &
           echo "OpenClaw PID: $!"
-          
           # Wait for gateway to be ready
           for i in $(seq 1 30); do
-            if curl -s -o /dev/null --max-time 2 http://127.0.0.1:18789/ 2>/dev/null; then
+            if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:18789/health 2>/dev/null; then
               echo "✅ Gateway healthy on http://127.0.0.1:18789"
               break
             fi
             sleep 1
           done
+          # If still not up after 30s, surface the log and fail
+          if ! curl -sf -o /dev/null --max-time 2 http://127.0.0.1:18789/health 2>/dev/null; then
+            echo "❌ Gateway did not become healthy"
+            cat /tmp/openclaw-gateway.log 2>/dev/null | tail -40
+            exit 1
+          fi
 
       # ── 7. Install & start cloudflared tunnel ──
       - name: Start cloudflared tunnel
         run: |
-          # Download cloudflared
           curl -sL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x /tmp/cloudflared
-
-          # Start quick tunnel in background
+          # Start quick tunnel pointing at the gateway
           nohup /tmp/cloudflared tunnel --url http://127.0.0.1:18789 --no-autoupdate > /tmp/cloudflared.log 2>&1 &
           echo "Cloudflared PID: $!"
-
-          # Wait for tunnel URL (up to 30 seconds)
           echo "Waiting for tunnel URL..."
           TUNNEL_URL=""
           for i in $(seq 1 30); do
+            # cloudflared prints: INF |  https://xxxx.trycloudflare.com  |
             TUNNEL_URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1 || true)
             if [ -n "$TUNNEL_URL" ]; then
               break
             fi
             sleep 1
           done
-
           if [ -n "$TUNNEL_URL" ]; then
-            echo ""
             echo "================================"
             echo " OpenClaw Web UI is ready!"
             echo "================================"
-            echo ""
-            echo "URL:   $TUNNEL_URL"
-            echo "Token: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}"
-            echo ""
+            echo "URL: $TUNNEL_URL"
+            echo "Token: <set as OPENCLAW_GATEWAY_TOKEN secret; entered at the auth prompt>"
             echo "Open the URL in a browser — no device approval needed."
           else
             echo "❌ Failed to get tunnel URL"
@@ -270,8 +229,8 @@ jobs:
       - name: Print final logs
         if: always()
         run: |
-          echo "=== OpenClaw Gateway Log ==="
-          cat /tmp/openclaw-gateway.log 2>/dev/null | tail -20
+          echo "=== OpenClaw Gateway Log (tail) ==="
+          tail -30 /tmp/openclaw-gateway.log 2>/dev/null || echo "(no gateway log)"
           echo ""
-          echo "=== Cloudflared Log ==="
-          cat /tmp/cloudflared.log 2>/dev/null | tail -10
+          echo "=== Cloudflared Log (tail) ==="
+          tail -15 /tmp/cloudflared.log 2>/dev/null || echo "(no cloudflared log)"
