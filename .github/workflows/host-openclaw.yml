@@ -1,0 +1,267 @@
+name: Host OpenClaw Web
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'How long to keep OpenClaw running (seconds, default 7200 = 2 hours)'
+        required: false
+        default: '7200'
+
+jobs:
+  openclaw-web:
+    name: OpenClaw behind trycloudflare tunnel
+    runs-on: ubuntu-22.04
+    timeout-minutes: 150  # 150 min hard cap
+
+    steps:
+      # ── 1. Install dependencies ──
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl git build-essential python3 unzip
+
+      # ── 2. Install nvm, Node 26, OpenClaw ──
+      - name: Setup Node 26 + OpenClaw
+        run: |
+          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          nvm install 26 && nvm use 26 && nvm alias default 26
+          npm install -g npm@latest --no-audit --no-fund
+          npm install -g openclaw@latest --allow-scripts=openclaw,@google/genai,protobufjs,tree-sitter-bash --no-audit --no-fund
+          # Make available globally
+          ln -sf "$(dirname $(which openclaw))"/* /usr/bin/
+
+      # ── 3. Write identity/workspace files ──
+      - name: Write identity files
+        run: |
+          mkdir -p "$HOME/.openclaw/agents/main/sessions"
+          
+          # Create workspace dir with identity files so OpenClaw knows who it is
+          WORKSPACE_DIR="$HOME/openclaw-workspace"
+          mkdir -p "$WORKSPACE_DIR"
+          
+          cat > "$WORKSPACE_DIR/SOUL.md" << 'SOUL'
+          # SOUL.md - Who You Are
+          Be genuinely helpful. Have opinions. Be resourceful. Earn trust through competence.
+          SOUL
+
+          cat > "$WORKSPACE_DIR/IDENTITY.md" << 'IDENT'
+          # IDENTITY.md
+          - Name: Leon AI 5 (LA5)
+          - Creature: Fifth-generation AI agent
+          - Vibe: Direct, resourceful, execution-first.
+          - Emoji: 🥒
+          IDENT
+
+          cat > "$WORKSPACE_DIR/USER.md" << 'USER'
+          # USER.md - About Your Human
+          - Name: Leon
+          - What to call them: Leon
+          - Pronouns: he/him
+          - Timezone: UTC+3 (East Africa)
+          USER
+
+          cat > "$WORKSPACE_DIR/MEMORY.md" << 'MEM'
+          # MEMORY.md
+          This is a temporary OpenClaw instance running on GitHub Actions.
+          It serves as a browser-accessible gateway to Leon AI 5 (LA5).
+          MEM
+
+      # ── 4. Generate openclaw.json config ──
+      - name: Configure OpenClaw
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          OPENCLAW_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
+          SESSION_KEY: ${{ secrets.SESSION_KEY }}
+        run: |
+          WORKSPACE_DIR="$HOME/openclaw-workspace"
+          
+          cat > "$HOME/.openclaw/openclaw.json" << JSONEOF
+          {
+            "gateway": {
+              "mode": "local",
+              "port": 18789,
+              "bind": "loopback",
+              "auth": {
+                "mode": "token",
+                "token": "$OPENCLAW_TOKEN"
+              },
+              "tailscale": { "mode": "off", "resetOnExit": false },
+              "controlUi": {
+                "allowedOrigins": [
+                  "http://localhost:18789",
+                  "http://127.0.0.1:18789"
+                ],
+                "dangerouslyAllowHostHeaderOriginFallback": true,
+                "allowInsecureAuth": true,
+                "dangerouslyDisableDeviceAuth": true
+              }
+            },
+            "agents": {
+              "defaults": {
+                "workspace": "$WORKSPACE_DIR",
+                "model": {
+                  "primary": "oc-hy3-free/hy3-free"
+                },
+                "timeoutSeconds": 86400
+              }
+            },
+            "models": {
+              "mode": "merge",
+              "providers": {
+                "oc-hy3-free": {
+                  "baseUrl": "https://opencode.ai/zen/v1",
+                  "api": "openai-completions",
+                  "apiKey": "$OPENCODE_API_KEY",
+                  "timeoutSeconds": 86400,
+                  "models": [
+                    {
+                      "id": "hy3-free",
+                      "name": "oc/hy3-free (Primary)",
+                      "contextWindow": 128000,
+                      "maxTokens": 4096,
+                      "input": ["text"],
+                      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+                      "reasoning": false
+                    }
+                  ]
+                },
+                "oc-nemotron-3.5-lightning-free": {
+                  "baseUrl": "https://opencode.ai/zen/v1",
+                  "api": "openai-completions",
+                  "apiKey": "$OPENCODE_API_KEY",
+                  "timeoutSeconds": 86400,
+                  "models": [
+                    {
+                      "id": "nemotron-3.5-lightning-free",
+                      "name": "oc/nemotron-3.5-lightning-free (Fast)",
+                      "contextWindow": 128000,
+                      "maxTokens": 4096,
+                      "input": ["text"],
+                      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+                      "reasoning": false
+                    }
+                  ]
+                },
+                "oc-laguna-s-2.1-free": {
+                  "baseUrl": "https://opencode.ai/zen/v1",
+                  "api": "openai-completions",
+                  "apiKey": "$OPENCODE_API_KEY",
+                  "timeoutSeconds": 86400,
+                  "models": [
+                    {
+                      "id": "laguna-s-2.1-free",
+                      "name": "oc/laguna-s-2.1-free (Fallback)",
+                      "contextWindow": 128000,
+                      "maxTokens": 4096,
+                      "input": ["text"],
+                      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+                      "reasoning": false
+                    }
+                  ]
+                },
+                "custom-opencode-ai": {
+                  "baseUrl": "https://opencode.ai/zen/v1",
+                  "api": "openai-completions",
+                  "apiKey": "$OPENCODE_API_KEY",
+                  "timeoutSeconds": 86400,
+                  "models": [
+                    {
+                      "id": "big-pickle",
+                      "name": "big-pickle (Last Resort)",
+                      "contextWindow": 200000,
+                      "maxTokens": 16384,
+                      "input": ["text"],
+                      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+                      "reasoning": false
+                    }
+                  ]
+                }
+              }
+            },
+            "session": {
+              "dmScope": "per-channel-peer"
+            },
+            "tools": {
+              "profile": "coding"
+            }
+          }
+          JSONEOF
+          
+          echo "Config written to $HOME/.openclaw/openclaw.json"
+
+      # ── 5. Start OpenClaw gateway ──
+      - name: Start OpenClaw gateway
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          cd "$HOME/.openclaw"
+          nohup openclaw gateway > /tmp/openclaw-gateway.log 2>&1 &
+          echo "OpenClaw PID: $!"
+          
+          # Wait for gateway to be ready
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null --max-time 2 http://127.0.0.1:18789/ 2>/dev/null; then
+              echo "✅ Gateway healthy on http://127.0.0.1:18789"
+              break
+            fi
+            sleep 1
+          done
+
+      # ── 6. Install & start cloudflared tunnel ──
+      - name: Start cloudflared tunnel
+        run: |
+          # Download cloudflared
+          curl -sL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x /tmp/cloudflared
+
+          # Start quick tunnel in background
+          nohup /tmp/cloudflared tunnel --url http://127.0.0.1:18789 --no-autoupdate > /tmp/cloudflared.log 2>&1 &
+          echo "Cloudflared PID: $!"
+
+          # Wait for tunnel URL (up to 30 seconds)
+          echo "Waiting for tunnel URL..."
+          TUNNEL_URL=""
+          for i in $(seq 1 30); do
+            TUNNEL_URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1 || true)
+            if [ -n "$TUNNEL_URL" ]; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [ -n "$TUNNEL_URL" ]; then
+            echo ""
+            echo "================================"
+            echo " OpenClaw Web UI is ready!"
+            echo "================================"
+            echo ""
+            echo "URL:   $TUNNEL_URL"
+            echo "Token: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}"
+            echo ""
+            echo "Open the URL in a browser — no device approval needed."
+          else
+            echo "❌ Failed to get tunnel URL"
+            cat /tmp/cloudflared.log
+            exit 1
+          fi
+
+      # ── 7. Keep running for the specified duration ──
+      - name: Keep OpenClaw running
+        run: |
+          DURATION="${{ inputs.duration || '7200' }}"
+          echo "Keeping OpenClaw running for $DURATION seconds..."
+          sleep "$DURATION"
+          echo "Duration complete."
+
+      # ── 8. Final logs ──
+      - name: Print final logs
+        if: always()
+        run: |
+          echo "=== OpenClaw Gateway Log ==="
+          cat /tmp/openclaw-gateway.log 2>/dev/null | tail -20
+          echo ""
+          echo "=== Cloudflared Log ==="
+          cat /tmp/cloudflared.log 2>/dev/null | tail -10
