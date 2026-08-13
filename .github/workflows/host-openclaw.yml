@@ -21,19 +21,23 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq curl git build-essential python3 unzip
 
-      # ── 2. Install nvm, Node 26, OpenClaw ──
-      - name: Setup Node 26 + OpenClaw
+      # ── 2. Install nvm, Node 26 ──
+      - name: Setup Node 26
         run: |
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
           export NVM_DIR="$HOME/.nvm"
           [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
           nvm install 26 && nvm use 26 && nvm alias default 26
           npm install -g npm@latest --no-audit --no-fund
-          npm install -g openclaw@latest --allow-scripts=openclaw,@google/genai,protobufjs,tree-sitter-bash --no-audit --no-fund
-          # Make available globally
-          ln -sf "$(dirname $(which openclaw))"/* /usr/bin/
 
-      # ── 3. Write identity/workspace files ──
+      # ── 3. Install openclaw locally ──
+      - name: Install openclaw locally
+        run: |
+          export PATH="$HOME/.npm-global/bin:$PATH"
+          npm config set prefix "$HOME/.npm-global"
+          npm install openclaw@latest --no-audit --no-fund
+
+      # ── 4. Write identity/workspace files ──
       - name: Write identity files
         run: |
           mkdir -p "$HOME/.openclaw/agents/main/sessions"
@@ -69,7 +73,7 @@ jobs:
           It serves as a browser-accessible gateway to Leon AI 5 (LA5).
           MEM
 
-      # ── 4. Generate openclaw.json config ──
+      # ── 5. Generate openclaw.json config ──
       - name: Configure OpenClaw
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -192,11 +196,12 @@ jobs:
           
           echo "Config written to $HOME/.openclaw/openclaw.json"
 
-      # ── 5. Start OpenClaw gateway ──
+      # ── 6. Start OpenClaw gateway ──
       - name: Start OpenClaw gateway
         run: |
           export NVM_DIR="$HOME/.nvm"
           [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          export PATH="$HOME/.npm-global/bin:$PATH"
           cd "$HOME/.openclaw"
           nohup openclaw gateway > /tmp/openclaw-gateway.log 2>&1 &
           echo "OpenClaw PID: $!"
@@ -210,7 +215,7 @@ jobs:
             sleep 1
           done
 
-      # ── 6. Install & start cloudflared tunnel ──
+      # ── 7. Install & start cloudflared tunnel ──
       - name: Start cloudflared tunnel
         run: |
           # Download cloudflared
@@ -248,7 +253,7 @@ jobs:
             exit 1
           fi
 
-      # ── 7. Keep running for the specified duration ──
+      # ── 8. Keep running for the specified duration ──
       - name: Keep OpenClaw running
         run: |
           DURATION="${{ inputs.duration || '7200' }}"
@@ -256,7 +261,7 @@ jobs:
           sleep "$DURATION"
           echo "Duration complete."
 
-      # ── 8. Final logs ──
+      # ── 9. Final logs ──
       - name: Print final logs
         if: always()
         run: |
