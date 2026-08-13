@@ -34,8 +34,8 @@ jobs:
       - name: Install openclaw locally
         run: |
           export PATH="$HOME/.npm-global/bin:$PATH"
-          npm config set prefix "$HOME/.npm-global"
-          npm install openclaw@latest --no-audit --no-fund
+          # Install openclaw with prefix to $HOME/.npm-global (no system symlinks)
+          npm install openclaw@latest --prefix "$HOME/.npm-global" --no-audit --no-fund
 
       # ── 4. Write identity/workspace files ──
       - name: Write identity files
@@ -76,11 +76,14 @@ jobs:
       # ── 5. Generate openclaw.json config ──
       - name: Configure OpenClaw
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OPENCLAW_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
-          SESSION_KEY: ${{ secrets.SESSION_KEY }}
+          OPENCODE_API_KEY: '${{ secrets.OPENCODE_API_KEY }}'
+          OPENCLAW_TOKEN: '${{ secrets.OPENCLAW_GATEWAY_TOKEN }}'
+          SESSION_KEY: '${{ secrets.SESSION_KEY }}'
         run: |
           WORKSPACE_DIR="$HOME/openclaw-workspace"
+          
+          # Clear any npm config that may conflict with nvm
+          npm config delete prefix 2>/dev/null || true
           
           cat > "$HOME/.openclaw/openclaw.json" << JSONEOF
           {
@@ -90,7 +93,7 @@ jobs:
               "bind": "loopback",
               "auth": {
                 "mode": "token",
-                "token": "$OPENCLAW_TOKEN"
+                "token": "${OPENCLAW_TOKEN}"
               },
               "tailscale": { "mode": "off", "resetOnExit": false },
               "controlUi": {
@@ -118,7 +121,7 @@ jobs:
                 "oc-hy3-free": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "$OPENCODE_API_KEY",
+                  "apiKey": "${OPENCODE_API_KEY}",
                   "timeoutSeconds": 86400,
                   "models": [
                     {
@@ -135,7 +138,7 @@ jobs:
                 "oc-nemotron-3.5-lightning-free": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "$OPENCODE_API_KEY",
+                  "apiKey": "${OPENCODE_API_KEY}",
                   "timeoutSeconds": 86400,
                   "models": [
                     {
@@ -152,7 +155,7 @@ jobs:
                 "oc-laguna-s-2.1-free": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "$OPENCODE_API_KEY",
+                  "apiKey": "${OPENCODE_API_KEY}",
                   "timeoutSeconds": 86400,
                   "models": [
                     {
@@ -169,7 +172,7 @@ jobs:
                 "custom-opencode-ai": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "$OPENCODE_API_KEY",
+                  "apiKey": "${OPENCODE_API_KEY}",
                   "timeoutSeconds": 86400,
                   "models": [
                     {
@@ -203,6 +206,8 @@ jobs:
           [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
           export PATH="$HOME/.npm-global/bin:$PATH"
           cd "$HOME/.openclaw"
+          # Clear npm config conflicts before starting gateway
+          npm config delete prefix 2>/dev/null || true
           nohup openclaw gateway > /tmp/openclaw-gateway.log 2>&1 &
           echo "OpenClaw PID: $!"
           
