@@ -50,7 +50,12 @@ jobs:
           nvm use 26 --silent
           npm install -g npm@latest
           npm install openclaw@latest
-          openclaw --version
+          # npm -g installs into the nvm node's bin dir; ensure it's on PATH
+          NODE_BIN="$(dirname $(command -v node))"
+          echo "$NODE_BIN" >> "$GITHUB_PATH"
+          # Verify with explicit path in case PATH refresh lags within the step
+          OPENCLAW_BIN="$(command -v openclaw || npm bin -g)/openclaw"
+          node "$OPENCLAW_BIN" --version 2>/dev/null || npx openclaw --version
 
       # ── 4. Write identity/workspace files (from Codespace-3 repo) ──
       - name: Fetch identity files from Codespace-3
@@ -170,9 +175,14 @@ jobs:
       # ── 6. Start OpenClaw gateway ──
       - name: Start OpenClaw gateway
         run: |
-          export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use 26
+          export NVM_DIR="$HOME/.nvm"
+          . "$NVM_DIR/nvm.sh"
+          nvm use 26 --silent
+          NODE_BIN="$(dirname $(command -v node))"
+          export PATH="$NODE_BIN:$PATH"
+          OPENCLAW_BIN="$(command -v openclaw || npm bin -g)/openclaw"
           cd "$HOME/.openclaw"
-          nohup openclaw gateway run --port 18789 --bind loopback \
+          nohup node "$OPENCLAW_BIN" gateway run --port 18789 --bind loopback \
             > /tmp/openclaw-gateway.log 2>&1 &
           echo "OpenClaw PID: $!"
           # Wait for the WebSocket/HTTP listener to accept connections
