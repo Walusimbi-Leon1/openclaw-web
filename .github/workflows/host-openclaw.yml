@@ -7,75 +7,75 @@ on:
         description: 'How long to keep OpenClaw running (seconds, default 7200 = 2 hours)'
         required: false
         default: '7200'
+      tunnel_type:
+        description: 'Tunnel: "trycloudflare" (no account, random URL) or "cloudflared_named" (needs CF_ACCOUNT_ID + TUNNEL_TOKEN)'
+        required: false
+        default: 'trycloudflare'
+
+concurrency:
+  group: openclaw-web-session
+  cancel-in-progress: false
 
 jobs:
   openclaw-web:
     name: OpenClaw behind trycloudflare tunnel
     runs-on: ubuntu-22.04
-    timeout-minutes: 150  # 150 min hard cap
+    timeout-minutes: 150  # hard cap (2h30m)
     env:
-      # Resolve nvm once at job level so every step shares the same Node.
       NVM_DIR: "$HOME/.nvm"
-      PATH: "$HOME/.npm-global/bin:$HOME/.nvm/versions/node/v26/bin:$HOME/.local/bin:$PATH"
 
     steps:
       # ── 1. Install system dependencies ──
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl git build-essential python3 unzip
+          sudo apt-get install -y curl git build-essential python3 unzip jq
 
       # ── 2. Install nvm + Node 26 ──
       - name: Setup Node 26
         run: |
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+          export NVM_DIR="$HOME/.nvm"
           . "$NVM_DIR/nvm.sh"
           nvm install 26
           nvm use 26
           nvm alias default 26
-          # nuke any globalconfig/prefix that breaks nvm (the exit-code-11 trap)
-          nvm use --delete-prefix 26 --silent 2>/dev/null || nvm use 26
-          npx --version
+          # Write node bin path to a file OpenClaw can inherit across steps
+          echo "$HOME/.nvm/versions/node/v26/bin" >> "$GITHUB_PATH"
           node --version
+          npx --version
 
       # ── 3. Install openclaw ──
       - name: Install openclaw
         run: |
-          . "$NVM_DIR/nvm.sh" && nvm use 26
+          export NVM_DIR="$HOME/.nvm"
+          . "$NVM_DIR/nvm.sh"
+          nvm use 26
           npm install -g npm@latest
           npm install openclaw@latest
+          openclaw --version
 
-      # ── 4. Write identity/workspace files ──
-      - name: Write identity files
+      # ── 4. Write identity/workspace files (from Codespace-3 repo) ──
+      - name: Fetch identity files from Codespace-3
+        env:
+          GH_PAT: '${{ secrets.GH_PAT_Codespace3 }}'
         run: |
-          mkdir -p "$HOME/.openclaw/agents/main/sessions"
-          WORKSPACE_DIR="$HOME/openclaw-workspace"
-          mkdir -p "$WORKSPACE_DIR"
-          cat > "$WORKSPACE_DIR/SOUL.md" << 'SOUL'
-          # SOUL.md
-          Be genuinely helpful. Have opinions. Be resourceful. Earn trust through competence.
-          SOUL
-          cat > "$WORKSPACE_DIR/IDENTITY.md" << 'IDENT'
-          # IDENTITY.md - Leon AI 5 (LA5), 5th-gen agent, vibe: direct/execution-first, emoji 🥒
-          IDENT
-          cat > "$WORKSPACE_DIR/USER.md" << 'USER'
-          # USER.md - About Your Human
-          - Name: Leon
-          - What to call them: Leon
-          - Pronouns: he/him
-          - Timezone: UTC+3 (East Africa)
-          USER
-          cat > "$WORKSPACE_DIR/MEMORY.md" << 'MEM'
-          # MEMORY.md
-          Temporary OpenClaw instance on GitHub Actions, behind a trycloudflare tunnel.
-          MEM
+          mkdir -p "$HOME/openclaw-workspace" "$HOME/.openclaw/agents/main/sessions"
+          # The identity files (SOUL/IDENTITY/USER/TOOLS/MEMORY) live in the Codespace-3 repo.
+          BASE="https://raw.githubusercontent.com/Walusimbi-Leon1/Codespace-3/main"
+          for f in SOUL.md IDENTITY.md USER.md MEMORY.md; do
+            curl -sfL "$BASE/$f" -o "$HOME/openclaw-workspace/$f" || { echo "::error::failed to fetch $f"; exit 1; }
+          done
+          # Tools + daily memory are useful context too
+          curl -sfL "$BASE/TOOLS.md" -o "$HOME/openclaw-workspace/TOOLS.md" || true
+          echo "Identity files written:"
+          ls -la "$HOME/openclaw-workspace/"
 
       # ── 5. Generate openclaw.json config ──
       - name: Configure OpenClaw
         env:
           OPENCODE_API_KEY: '${{ secrets.OPENCODE_API_KEY }}'
           OPENCLAW_TOKEN: '${{ secrets.OPENCLAW_GATEWAY_TOKEN }}'
-          SESSION_KEY: '${{ secrets.SESSION_KEY }}'
         run: |
           WORKSPACE_DIR="$HOME/openclaw-workspace"
           cat > "$HOME/.openclaw/openclaw.json" << JSONEOF
@@ -84,21 +84,28 @@ jobs:
               "mode": "local",
               "port": 18789,
               "bind": "loopback",
-              "auth": { "mode": "token", "token": "$OPENCLAW_TOKEN" },
-              "tailscale": { "mode": "off", "resetOnExit": false },
+              "auth": {
+                "mode": "token",
+                "token": "$OPENCLAW_TOKEN",
+                "allowTailscale": false
+              },
               "controlUi": {
-                "allowedOrigins": ["http://localhost:18789", "http://127.0.0.1:18789"],
+                "enabled": true,
+                "basePath": "/",
+                "allowedOrigins": [],
                 "dangerouslyAllowHostHeaderOriginFallback": true,
                 "allowInsecureAuth": true,
                 "dangerouslyDisableDeviceAuth": true
-              }
+              },
+              "tailscale": { "mode": "off", "resetOnExit": false }
             },
             "agents": {
               "defaults": {
                 "workspace": "$WORKSPACE_DIR",
                 "model": { "primary": "oc-hy3-free/hy3-free" },
                 "timeoutSeconds": 86400
-              }
+              },
+              "main": { "workspace": "$WORKSPACE_DIR" }
             },
             "models": {
               "mode": "merge",
@@ -161,72 +168,104 @@ jobs:
             "tools": { "profile": "coding" }
           }
           JSONEOF
-          # validate JSON
           python3 -c "import json; json.load(open('$HOME/.openclaw/openclaw.json')); print('Config OK')"
 
       # ── 6. Start OpenClaw gateway ──
       - name: Start OpenClaw gateway
         run: |
-          . "$NVM_DIR/nvm.sh" && nvm use --delete-prefix 26 --silent 2>/dev/null || nvm use 26
+          export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh"; nvm use 26
           cd "$HOME/.openclaw"
-          nohup openclaw gateway > /tmp/openclaw-gateway.log 2>&1 &
+          nohup openclaw gateway run --port 18789 --bind loopback \
+            > /tmp/openclaw-gateway.log 2>&1 &
           echo "OpenClaw PID: $!"
-          # Wait for gateway to be ready
-          for i in $(seq 1 30); do
+          # Wait for the WebSocket/HTTP listener to accept connections
+          for i in $(seq 1 40); do
             if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:18789/health 2>/dev/null; then
               echo "✅ Gateway healthy on http://127.0.0.1:18789"
+              # confirm the control UI is actually served (post-fix)
+              if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:18789/ 2>/dev/null; then
+                echo "✅ Control UI reachable on http://127.0.0.1:18789/"
+              else
+                echo "⚠️ Control UI not yet reachable — check controlUi.enabled"
+              fi
               break
             fi
             sleep 1
           done
-          # If still not up after 30s, surface the log and fail
           if ! curl -sf -o /dev/null --max-time 2 http://127.0.0.1:18789/health 2>/dev/null; then
             echo "❌ Gateway did not become healthy"
-            cat /tmp/openclaw-gateway.log 2>/dev/null | tail -40
+            tail -40 /tmp/openclaw-gateway.log 2>/dev/null
             exit 1
           fi
 
-      # ── 7. Install & start cloudflared tunnel ──
-      - name: Start cloudflared tunnel
+      # ── 7. Install cloudflared ──
+      - name: Install cloudflared
         run: |
-          curl -sL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-          chmod +x /tmp/cloudflared
-          # Start quick tunnel pointing at the gateway
-          nohup /tmp/cloudflared tunnel --url http://127.0.0.1:18789 --no-autoupdate > /tmp/cloudflared.log 2>&1 &
+          sudo mkdir -p /opt/cloudflared
+          sudo curl -sL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          sudo chmod +x /usr/local/bin/cloudflared
+          cloudflared --version
+
+      # ── 8. Start cloudflared tunnel → trycloudflare ──
+      - name: Start cloudflared tunnel
+        id: tunnel
+        run: |
+          # trycloudflare quick tunnel: dials OUT, no CF account, random subdomain.
+          nohup cloudflared tunnel --url http://127.0.0.1:18789 --no-autoupdate \
+            > /tmp/cloudflared.log 2>&1 &
           echo "Cloudflared PID: $!"
-          echo "Waiting for tunnel URL..."
+          echo "Waiting for trycloudflare URL..."
+
           TUNNEL_URL=""
-          for i in $(seq 1 30); do
-            # cloudflared prints: INF |  https://xxxx.trycloudflare.com  |
+          for i in $(seq 1 40); do
             TUNNEL_URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1 || true)
-            if [ -n "$TUNNEL_URL" ]; then
-              break
-            fi
+            if [ -n "$TUNNEL_URL" ]; then break; fi
             sleep 1
           done
-          if [ -n "$TUNNEL_URL" ]; then
-            echo "================================"
-            echo " OpenClaw Web UI is ready!"
-            echo "================================"
-            echo "URL: $TUNNEL_URL"
-            echo "Token: <set as OPENCLAW_GATEWAY_TOKEN secret; entered at the auth prompt>"
-            echo "Open the URL in a browser — no device approval needed."
-          else
-            echo "❌ Failed to get tunnel URL"
-            cat /tmp/cloudflared.log
+
+          if [ -z "$TUNNEL_URL" ]; then
+            echo "❌ Failed to acquire trycloudflare tunnel URL"
+            echo "=== cloudflared.log (tail) ==="
+            tail -30 /tmp/cloudflared.log 2>/dev/null
             exit 1
           fi
+          "TUNNEL_URL=$TUNNEL_URL" >> "$GITHUB_OUTPUT"
 
-      # ── 8. Keep running for the specified duration ──
-      - name: Keep OpenClaw running
+      # ── 9. Verify the tunnel actually serves the OpenClaw UI ──
+      - name: Verify tunnel reachability
+        run: |
+          TUNNEL_URL="${{ steps.tunnel.outputs.TUNNEL_URL }}"
+          echo "TUNNEL_URL=$TUNNEL_URL"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$TUNNEL_URL/" || echo "000")
+          echo "CONTROL_UI_HTTP_STATUS=$HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Control UI not reachable through tunnel (HTTP $HTTP_CODE)"
+            echo "=== cloudflared.log ==="
+            tail -15 /tmp/cloudflared.log 2>/dev/null
+            exit 1
+          fi
+          echo "✅ OpenClaw control UI reachable through trycloudflare tunnel"
+
+      - name: Emit connection details
+        run: |
+          TUNNEL_URL="${{ steps.tunnel.outputs.TUNNEL_URL }}"
+          TOKEN='<set via OPENCLAW_GATEWAY_TOKEN secret>'
+          echo "================================"
+          echo " OpenClaw Web UI is ready!"
+          echo "================================"
+          echo "FINAL_URL=$TUNNEL_URL"
+          echo "RDP/TOKEN=$TOKEN"
+          echo "Open the URL in your browser — enter your gateway token at the auth prompt."
+
+      - name: Keep running for the specified duration
         run: |
           DURATION="${{ inputs.duration || '7200' }}"
-          echo "Keeping OpenClaw running for $DURATION seconds..."
+          echo "Keeping OpenClaw alive for $DURATION seconds."
           sleep "$DURATION"
           echo "Duration complete."
 
-      # ── 9. Final logs ──
-      - name: Print final logs
+      - name: Final logs
         if: always()
         run: |
           echo "=== OpenClaw Gateway Log (tail) ==="
