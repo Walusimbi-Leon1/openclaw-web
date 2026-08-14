@@ -21,8 +21,6 @@ jobs:
     name: OpenClaw behind trycloudflare tunnel
     runs-on: ubuntu-22.04
     timeout-minutes: 150  # hard cap (2h30m)
-    env:
-      NVM_DIR: "$HOME/.nvm"
 
     steps:
       # ── 1. Install system dependencies ──
@@ -34,14 +32,13 @@ jobs:
       # ── 2. Install nvm + Node 26 ──
       - name: Setup Node 26
         run: |
+          # Install nvm (it creates $HOME/.nvm itself; do NOT pre-set NVM_DIR as env)
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
           export NVM_DIR="$HOME/.nvm"
           . "$NVM_DIR/nvm.sh"
           nvm install 26
           nvm use 26
           nvm alias default 26
-          # Write node bin path to a file OpenClaw can inherit across steps
-          echo "$HOME/.nvm/versions/node/v26/bin" >> "$GITHUB_PATH"
           node --version
           npx --version
 
@@ -50,7 +47,7 @@ jobs:
         run: |
           export NVM_DIR="$HOME/.nvm"
           . "$NVM_DIR/nvm.sh"
-          nvm use 26
+          nvm use 26 --silent
           npm install -g npm@latest
           npm install openclaw@latest
           openclaw --version
@@ -248,15 +245,16 @@ jobs:
           echo "✅ OpenClaw control UI reachable through trycloudflare tunnel"
 
       - name: Emit connection details
+        env:
+          OPENCLAW_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
+          TUNNEL_URL: ${{ steps.tunnel.outputs.TUNNEL_URL }}
         run: |
-          TUNNEL_URL="${{ steps.tunnel.outputs.TUNNEL_URL }}"
-          TOKEN='<set via OPENCLAW_GATEWAY_TOKEN secret>'
           echo "================================"
           echo " OpenClaw Web UI is ready!"
           echo "================================"
           echo "FINAL_URL=$TUNNEL_URL"
-          echo "RDP/TOKEN=$TOKEN"
-          echo "Open the URL in your browser — enter your gateway token at the auth prompt."
+          echo "GATEWAY_TOKEN=$OPENCLAW_TOKEN"
+          echo "Open the URL in your browser — enter the token at the auth prompt."
 
       - name: Keep running for the specified duration
         run: |
