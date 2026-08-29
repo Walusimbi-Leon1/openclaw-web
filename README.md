@@ -31,11 +31,16 @@ The AI gets its identity from the Codespace-3 repository (https://github.com/Wal
 
 ## Secrets Required
 
-| Secret | Description |
-|---|---|
-| `OPENCODE_API_KEY` | Your OpenCode.ai API key (`sk-...`) |
-| `OPENCLAW_GATEWAY_TOKEN` | A strong token for gateway auth (browser will ask for this) |
-| `SESSION_KEY` | Unique identifier for your session (used in `agent:main:<key>`) |
+Set these in **Settings → Secrets and variables → Actions** on this repo:
+
+| Secret | Required | Description |
+|---|---|---|
+| `OPENCODE_API_KEY` | ✅ | Your OpenCode.ai API key (`sk-...`) — used for the chat models |
+| `OPENCLAW_GATEWAY_TOKEN` | ⬜ optional | Token the browser will ask for. If left empty, a random one is generated and printed in the run logs + summary. |
+| `GH_PAT_Codespace3` | ✅ | A GitHub PAT (classic or fine-grained) with **read** access to the private `Codespace-3` repo, so the identity files (SOUL/IDENTITY/USER/MEMORY) can be fetched. Without it the agent won't get its LA5 identity. |
+| `SESSION_KEY` | ⬜ optional | Identifier used as `agent:main:<SESSION_KEY>`. Defaults to `main` if unset. |
+
+> Note: the built-in `GITHUB_TOKEN` has **no cross-repo access** to `Codespace-3`, so the dedicated `GH_PAT_Codespace3` secret is required (the workflow falls back to `GITHUB_TOKEN` only if `GH_PAT_Codespace3` is absent).
 
 ## How It Works
 

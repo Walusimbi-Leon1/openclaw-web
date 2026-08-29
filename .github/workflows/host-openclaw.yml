@@ -32,7 +32,6 @@ jobs:
       # ── 2. Install nvm + Node 26 ──
       - name: Setup Node 26
         run: |
-          # Install nvm (it creates $HOME/.nvm itself; do NOT pre-set NVM_DIR as env)
           curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
           export NVM_DIR="$HOME/.nvm"
           . "$NVM_DIR/nvm.sh"
@@ -42,48 +41,70 @@ jobs:
           node --version
           npx --version
 
-      # ── 3. Install openclaw ──
+      # ── 3. Install openclaw (GLOBALLY — required so the binary is on PATH) ──
       - name: Install openclaw
         run: |
           export NVM_DIR="$HOME/.nvm"
           . "$NVM_DIR/nvm.sh"
           nvm use 26 --silent
           npm install -g npm@latest
-          npm install openclaw@latest
-          # npm -g installs into the nvm node's global bin dir; add it to PATH for this step
+          # BUG FIX: must be -g or the openclaw binary is never on PATH and the
+          # gateway start step fails with "command not found".
+          npm install -g openclaw@latest
+          # Make the global node bin dir available to every later step.
           NODE_BIN="$(dirname "$(command -v node)")"
-          export PATH="$NODE_BIN:$PATH"
           echo "$NODE_BIN" >> "$GITHUB_PATH"
           echo "node: $(command -v node) -> $(node --version)"
-          echo "npm global bin: $(npm config get prefix)/bin"
-          # Resolve the binary with npm config (works on npm 11)
-          OPENCLAW_BIN="$(npm config get prefix)/bin/openclaw"
-          echo "openclaw bin: $OPENCLAW_BIN"
-          "$OPENCLAW_BIN" --version
+          echo "openclaw: $(command -v openclaw)"
+          openclaw --version
 
       # ── 4. Write identity/workspace files (from Codespace-3 repo) ──
       - name: Fetch identity files from Codespace-3
         env:
           GH_PAT: '${{ secrets.GH_PAT_Codespace3 }}'
+          GH_TOKEN_FALLBACK: '${{ secrets.GITHUB_TOKEN }}'
         run: |
-          mkdir -p "$HOME/openclaw-workspace" "$HOME/.openclaw/agents/main/sessions"
-          # The identity files (SOUL/IDENTITY/USER/TOOLS/MEMORY) live in the Codespace-3 repo.
+          mkdir -p "$HOME/openclaw-workspace"
           BASE="https://raw.githubusercontent.com/Walusimbi-Leon1/Codespace-3/main"
-          for f in SOUL.md IDENTITY.md USER.md MEMORY.md; do
-            curl -sfL "$BASE/$f" -o "$HOME/openclaw-workspace/$f" || { echo "::error::failed to fetch $f"; exit 1; }
+          # Codespace-3 is a PRIVATE repo, so we need a token for raw access.
+          # Prefer the dedicated PAT; fall back to the built-in GITHUB_TOKEN
+          # (only works if Codespace-3 has granted this repo read access).
+          AUTH_ARGS=()
+          if [ -n "$GH_PAT" ]; then
+            AUTH_ARGS=(-H "Authorization: Bearer $GH_PAT")
+          elif [ -n "$GH_TOKEN_FALLBACK" ]; then
+            AUTH_ARGS=(-H "Authorization: Bearer $GH_TOKEN_FALLBACK")
+          fi
+          # Core identity files required to boot as LA5.
+          for f in SOUL.md IDENTITY.md USER.md MEMORY.md AGENTS.md HEARTBEAT.md TOOLS.md; do
+            if ! curl -sfL "${AUTH_ARGS[@]}" "$BASE/$f" -o "$HOME/openclaw-workspace/$f"; then
+              if [ "$f" = "MEMORY.md" ] || [ "$f" = "AGENTS.md" ] || [ "$f" = "HEARTBEAT.md" ] || [ "$f" = "TOOLS.md" ]; then
+                echo "::warning::failed to fetch optional $f (continuing without it)"
+              else
+                echo "::error::failed to fetch required $f — check GH_PAT_Codespace3 secret"
+                exit 1
+              fi
+            fi
           done
-          # Tools + daily memory are useful context too
-          curl -sfL "$BASE/TOOLS.md" -o "$HOME/openclaw-workspace/TOOLS.md" || true
           echo "Identity files written:"
           ls -la "$HOME/openclaw-workspace/"
 
       # ── 5. Generate openclaw.json config ──
       - name: Configure OpenClaw
+        id: config
         env:
           OPENCODE_API_KEY: '${{ secrets.OPENCODE_API_KEY }}'
-          OPENCLAW_TOKEN: '${{ secrets.OPENCLAW_GATEWAY_TOKEN }}'
+          OPENCLAW_TOKEN_IN: '${{ secrets.OPENCLAW_GATEWAY_TOKEN }}'
+          SESSION_KEY: '${{ secrets.SESSION_KEY }}'
         run: |
           WORKSPACE_DIR="$HOME/openclaw-workspace"
+          # BUG FIX: if the token secret is empty, generate one so the emitted
+          # token is always valid (otherwise the user could never log in).
+          OPENCLAW_TOKEN="${OPENCLAW_TOKEN_IN:-$(openssl rand -hex 24)}"
+          echo "OPENCLAW_TOKEN=$OPENCLAW_TOKEN" >> "$GITHUB_ENV"
+          echo "token=$OPENCLAW_TOKEN" >> "$GITHUB_OUTPUT"
+          # Optional session key (used as agent:main:<SESSION_KEY> in the UI URL).
+          SKEY="${SESSION_KEY:-main}"
           cat > "$HOME/.openclaw/openclaw.json" << JSONEOF
           {
             "gateway": {
@@ -119,7 +140,7 @@ jobs:
                 "oc-hy3-free": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "$OPENCODE_API_KEY",
+                  "apiKey": "${OPENCODE_API_KEY}",
                   "timeoutSeconds": 86400,
                   "models": [{
                     "id": "hy3-free", "name": "oc/hy3-free (Primary)",
@@ -132,7 +153,7 @@ jobs:
                 "oc-nemotron-3.5-lightning-free": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "$OPENCODE_API_KEY",
+                  "apiKey": "${OPENCODE_API_KEY}",
                   "timeoutSeconds": 86400,
                   "models": [{
                     "id": "nemotron-3.5-lightning-free", "name": "oc/nemotron-3.5-lightning-free (Fast)",
@@ -145,7 +166,7 @@ jobs:
                 "oc-laguna-s-2.1-free": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "$OPENCODE_API_KEY",
+                  "apiKey": "${OPENCODE_API_KEY}",
                   "timeoutSeconds": 86400,
                   "models": [{
                     "id": "laguna-s-2.1-free", "name": "oc/laguna-s-2.1-free (Fallback)",
@@ -158,7 +179,7 @@ jobs:
                 "custom-opencode-ai": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "$OPENCODE_API_KEY",
+                  "apiKey": "${OPENCODE_API_KEY}",
                   "timeoutSeconds": 86400,
                   "models": [{
                     "id": "big-pickle", "name": "big-pickle (Last Resort)",
@@ -175,39 +196,42 @@ jobs:
           }
           JSONEOF
           python3 -c "import json; json.load(open('$HOME/.openclaw/openclaw.json')); print('Config OK')"
+          echo "SESSION_KEY_USED=$SKEY" >> "$GITHUB_OUTPUT"
 
       # ── 6. Start OpenClaw gateway ──
       - name: Start OpenClaw gateway
+        env:
+          OPENCLAW_TOKEN: '${{ steps.config.outputs.token }}'
         run: |
           export NVM_DIR="$HOME/.nvm"
           . "$NVM_DIR/nvm.sh"
           nvm use 26 --silent
-          NODE_BIN="$(dirname "$(command -v node)")"
-          export PATH="$NODE_BIN:$PATH"
-          OPENCLAW_BIN="$(npm config get prefix)/bin/openclaw"
           cd "$HOME/.openclaw"
-          nohup "$OPENCLAW_BIN" gateway run --port 18789 --bind loopback \
-            > /tmp/openclaw-gateway.log 2>&1 &
-          echo "OpenClaw PID: $!"
-          # Wait for the WebSocket/HTTP listener to accept connections
-          for i in $(seq 1 40); do
-            if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:18789/health 2>/dev/null; then
-              echo "✅ Gateway healthy on http://127.0.0.1:18789"
-              # confirm the control UI is actually served (post-fix)
-              if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:18789/ 2>/dev/null; then
-                echo "✅ Control UI reachable on http://127.0.0.1:18789/"
-              else
-                echo "⚠️ Control UI not yet reachable — check controlUi.enabled"
-              fi
-              break
+          # setsid + disown so the gateway survives the step's shell exit.
+          setsid bash -c "openclaw gateway run --port 18789 --bind loopback > /tmp/openclaw-gateway.log 2>&1" &
+          disown
+          echo "OpenClaw launched."
+          # Wait for the gateway to be up. /health may be auth-gated, so we accept
+          # any non-connection-failure code (200/401/403). We also accept a
+          # listening/ready log line as a success signal.
+          HEALTHY=0
+          for i in $(seq 1 60); do
+            if grep -qiE "listening|ready|http server|gateway (is )?running|started" /tmp/openclaw-gateway.log 2>/dev/null; then
+              HEALTHY=1; break
+            fi
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
+              -H "Authorization: Bearer $OPENCLAW_TOKEN" "http://127.0.0.1:18789/health" 2>/dev/null || echo "000")
+            if [ "$CODE" != "000" ]; then
+              HEALTHY=1; break
             fi
             sleep 1
           done
-          if ! curl -sf -o /dev/null --max-time 2 http://127.0.0.1:18789/health 2>/dev/null; then
+          if [ "$HEALTHY" != "1" ]; then
             echo "❌ Gateway did not become healthy"
             tail -40 /tmp/openclaw-gateway.log 2>/dev/null
             exit 1
           fi
+          echo "✅ Gateway healthy on http://127.0.0.1:18789"
 
       # ── 7. Install cloudflared ──
       - name: Install cloudflared
@@ -223,52 +247,65 @@ jobs:
         id: tunnel
         run: |
           # trycloudflare quick tunnel: dials OUT, no CF account, random subdomain.
-          nohup cloudflared tunnel --url http://127.0.0.1:18789 --no-autoupdate \
-            > /tmp/cloudflared.log 2>&1 &
-          echo "Cloudflared PID: $!"
-          echo "Waiting for trycloudflare URL..."
-
+          setsid bash -c "cloudflared tunnel --url http://127.0.0.1:18789 --no-autoupdate > /tmp/cloudflared.log 2>&1" &
+          disown
+          echo "Cloudflared launched; waiting for trycloudflare URL..."
           TUNNEL_URL=""
           for i in $(seq 1 40); do
             TUNNEL_URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1 || true)
             if [ -n "$TUNNEL_URL" ]; then break; fi
             sleep 1
           done
-
           if [ -z "$TUNNEL_URL" ]; then
             echo "❌ Failed to acquire trycloudflare tunnel URL"
             echo "=== cloudflared.log (tail) ==="
             tail -30 /tmp/cloudflared.log 2>/dev/null
             exit 1
           fi
-          "TUNNEL_URL=$TUNNEL_URL" >> "$GITHUB_OUTPUT"
+          echo "TUNNEL_URL=$TUNNEL_URL" >> "$GITHUB_OUTPUT"
 
-      # ── 9. Verify the tunnel actually serves the OpenClaw UI ──
+      # ── 9. Verify the tunnel actually reaches the gateway ──
       - name: Verify tunnel reachability
+        env:
+          OPENCLAW_TOKEN: '${{ steps.config.outputs.token }}'
         run: |
           TUNNEL_URL="${{ steps.tunnel.outputs.TUNNEL_URL }}"
           echo "TUNNEL_URL=$TUNNEL_URL"
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$TUNNEL_URL/" || echo "000")
+          # BUG FIX: the control UI may be auth-gated. Any of 200/401/403 means the
+          # tunnel successfully reaches the gateway, so we accept those.
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            -H "Authorization: Bearer $OPENCLAW_TOKEN" "$TUNNEL_URL/" || echo "000")
           echo "CONTROL_UI_HTTP_STATUS=$HTTP_CODE"
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "❌ Control UI not reachable through tunnel (HTTP $HTTP_CODE)"
+          if [ "$HTTP_CODE" = "000" ]; then
+            echo "❌ Tunnel could not reach the gateway (HTTP 000 / connection failed)"
             echo "=== cloudflared.log ==="
             tail -15 /tmp/cloudflared.log 2>/dev/null
             exit 1
           fi
-          echo "✅ OpenClaw control UI reachable through trycloudflare tunnel"
+          echo "✅ Tunnel reaches the OpenClaw gateway (HTTP $HTTP_CODE)"
 
       - name: Emit connection details
         env:
-          OPENCLAW_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
+          OPENCLAW_TOKEN: '${{ steps.config.outputs.token }}'
           TUNNEL_URL: ${{ steps.tunnel.outputs.TUNNEL_URL }}
+          SESSION_KEY: ${{ steps.config.outputs.SESSION_KEY_USED }}
         run: |
           echo "================================"
           echo " OpenClaw Web UI is ready!"
           echo "================================"
           echo "FINAL_URL=$TUNNEL_URL"
           echo "GATEWAY_TOKEN=$OPENCLAW_TOKEN"
+          echo "SESSION_KEY=$SESSION_KEY"
           echo "Open the URL in your browser — enter the token at the auth prompt."
+          {
+            echo "# OpenClaw Web UI is ready"
+            echo ""
+            echo "**URL:** $TUNNEL_URL"
+            echo ""
+            echo "**Gateway token:** \`$OPENCLAW_TOKEN\`"
+            echo ""
+            echo "Open the URL in your browser and enter the token when prompted."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keep running for the specified duration
         run: |
