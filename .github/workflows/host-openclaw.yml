@@ -8,7 +8,7 @@ on:
         required: false
         default: '7200'
       tunnel_type:
-        description: 'Tunnel: "trycloudflare" (no account, random URL) or "cloudflared_named" (needs CF_ACCOUNT_ID + TUNNEL_TOKEN)'
+        description: 'Tunnel: trycloudflare (no account) or cloudflared_named (needs CF_ACCOUNT_ID + TOKEN)'
         required: false
         default: 'trycloudflare'
 
@@ -20,7 +20,7 @@ jobs:
   openclaw-web:
     name: OpenClaw behind trycloudflare tunnel
     runs-on: ubuntu-22.04
-    timeout-minutes: 150  # hard cap (2h30m)
+    timeout-minutes: 150  # hard cap (~2h30m)
 
     steps:
       # ── 1. Install system dependencies ──
@@ -41,24 +41,21 @@ jobs:
           node --version
           npx --version
 
-      # ── 3. Install openclaw (GLOBALLY — required so the binary is on PATH) ──
+      # ── 3. Install openclaw (GLOBAL — required so the binary is on PATH) ──
       - name: Install openclaw
         run: |
           export NVM_DIR="$HOME/.nvm"
           . "$NVM_DIR/nvm.sh"
           nvm use 26 --silent
           npm install -g npm@latest
-          # BUG FIX: must be -g or the openclaw binary is never on PATH and the
-          # gateway start step fails with "command not found".
           npm install -g openclaw@latest
-          # Make the global node bin dir available to every later step.
           NODE_BIN="$(dirname "$(command -v node)")"
           echo "$NODE_BIN" >> "$GITHUB_PATH"
           echo "node: $(command -v node) -> $(node --version)"
           echo "openclaw: $(command -v openclaw)"
           openclaw --version
 
-      # ── 4. Write identity/workspace files (from Codespace-3 repo) ──
+      # ── 4. Write identity/workspace files (from private Codespace-3 repo) ──
       - name: Fetch identity files from Codespace-3
         env:
           GH_PAT: '${{ secrets.GH_PAT_Codespace3 }}'
@@ -66,16 +63,12 @@ jobs:
         run: |
           mkdir -p "$HOME/openclaw-workspace"
           BASE="https://raw.githubusercontent.com/Walusimbi-Leon1/Codespace-3/main"
-          # Codespace-3 is a PRIVATE repo, so we need a token for raw access.
-          # Prefer the dedicated PAT; fall back to the built-in GITHUB_TOKEN
-          # (only works if Codespace-3 has granted this repo read access).
           AUTH_ARGS=()
           if [ -n "$GH_PAT" ]; then
             AUTH_ARGS=(-H "Authorization: Bearer $GH_PAT")
           elif [ -n "$GH_TOKEN_FALLBACK" ]; then
             AUTH_ARGS=(-H "Authorization: Bearer $GH_TOKEN_FALLBACK")
           fi
-          # Core identity files required to boot as LA5.
           for f in SOUL.md IDENTITY.md USER.md MEMORY.md AGENTS.md HEARTBEAT.md TOOLS.md; do
             if ! curl -sfL "${AUTH_ARGS[@]}" "$BASE/$f" -o "$HOME/openclaw-workspace/$f"; then
               if [ "$f" = "MEMORY.md" ] || [ "$f" = "AGENTS.md" ] || [ "$f" = "HEARTBEAT.md" ] || [ "$f" = "TOOLS.md" ]; then
@@ -99,13 +92,13 @@ jobs:
         run: |
           WORKSPACE_DIR="$HOME/openclaw-workspace"
           mkdir -p "$HOME/.openclaw"
-          # BUG FIX: if the token secret is empty, generate one so the emitted
-          # token is always valid (otherwise the user could never log in).
+          # BUG FIX: generate a token if the secret is empty.
           OPENCLAW_TOKEN="${OPENCLAW_TOKEN_IN:-$(openssl rand -hex 24)}"
           echo "OPENCLAW_TOKEN=$OPENCLAW_TOKEN" >> "$GITHUB_ENV"
           echo "token=$OPENCLAW_TOKEN" >> "$GITHUB_OUTPUT"
-          # Optional session key (used as agent:main:<SESSION_KEY> in the UI URL).
+          # Optional session key. Defaults to "main".
           SKEY="${SESSION_KEY:-main}"
+          echo "SESSION_KEY_USED=$SKEY" >> "$GITHUB_OUTPUT"
           cat > "$HOME/.openclaw/openclaw.json" << JSONEOF
           {
             "gateway": {
@@ -114,7 +107,7 @@ jobs:
               "bind": "loopback",
               "auth": {
                 "mode": "token",
-                "token": "$OPENCLAW_TOKEN",
+                "token": "***",
                 "allowTailscale": false
               },
               "controlUi": {
@@ -197,10 +190,21 @@ jobs:
           }
           JSONEOF
           python3 -c "import json; json.load(open('$HOME/.openclaw/openclaw.json')); print('Config OK')"
-          echo "SESSION_KEY_USED=$SKEY" >> "$GITHUB_OUTPUT"
 
-      # ── 6. Start OpenClaw gateway ──
-      - name: Start OpenClaw gateway
+      # ── 6. Install cloudflared ──
+      - name: Install cloudflared
+        run: |
+          sudo curl -sL -o /usr/local/bin/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          sudo chmod +x /usr/local/bin/cloudflared
+          cloudflared --version
+
+      # ── 7. Start OpenClaw gateway + cloudflared tunnel TOGETHER and stay alive ──
+      # Single shell for the rest of the job lifetime so the gateway never gets
+      # reaped between steps (the cause of the 502 in earlier tries). Gateway and
+      # cloudflared are background siblings; we then wait for the requested duration.
+      - name: Run OpenClaw behind trycloudflare tunnel
+        id: run
         env:
           OPENCLAW_TOKEN: '${{ steps.config.outputs.token }}'
         run: |
@@ -208,13 +212,13 @@ jobs:
           . "$NVM_DIR/nvm.sh"
           nvm use 26 --silent
           cd "$HOME/.openclaw"
-          # setsid + disown so the gateway survives the step's shell exit.
-          setsid bash -c "openclaw gateway run --port 18789 --bind loopback > /tmp/openclaw-gateway.log 2>&1" &
-          disown
-          echo "OpenClaw launched."
-          # Wait for the gateway to be up. /health may be auth-gated, so we accept
-          # any non-connection-failure code (200/401/403). We also accept a
-          # listening/ready log line as a success signal.
+          echo "Starting OpenClaw gateway on 127.0.0.1:18789..."
+          setsid bash -c 'openclaw gateway run --port 18789 --bind loopback > /tmp/openclaw-gateway.log 2>&1' &
+          GW_PID=$!
+          echo "Starting cloudflared trycloudflare tunnel..."
+          setsid bash -c 'cloudflared tunnel --url http://127.0.0.1:18789 --no-autoupdate > /tmp/cloudflared.log 2>&1' &
+          CF_PID=$!
+          # --- wait for gateway readiness ---
           HEALTHY=0
           for i in $(seq 1 60); do
             if grep -qiE "listening|ready|http server|gateway (is )?running|started" /tmp/openclaw-gateway.log 2>/dev/null; then
@@ -229,30 +233,14 @@ jobs:
           done
           if [ "$HEALTHY" != "1" ]; then
             echo "❌ Gateway did not become healthy"
+            echo "=== gateway.log (tail) ==="
             tail -40 /tmp/openclaw-gateway.log 2>/dev/null
             exit 1
           fi
-          echo "✅ Gateway healthy on http://127.0.0.1:18789"
-
-      # ── 7. Install cloudflared ──
-      - name: Install cloudflared
-        run: |
-          sudo mkdir -p /opt/cloudflared
-          sudo curl -sL -o /usr/local/bin/cloudflared \
-            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-          sudo chmod +x /usr/local/bin/cloudflared
-          cloudflared --version
-
-      # ── 8. Start cloudflared tunnel → trycloudflare ──
-      - name: Start cloudflared tunnel
-        id: tunnel
-        run: |
-          # trycloudflare quick tunnel: dials OUT, no CF account, random subdomain.
-          setsid bash -c "cloudflared tunnel --url http://127.0.0.1:18789 --no-autoupdate > /tmp/cloudflared.log 2>&1" &
-          disown
-          echo "Cloudflared launched; waiting for trycloudflare URL..."
+          echo "✅ Gateway healthy"
+          # --- wait for the trycloudflare URL ---
           TUNNEL_URL=""
-          for i in $(seq 1 40); do
+          for i in $(seq 1 45); do
             TUNNEL_URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1 || true)
             if [ -n "$TUNNEL_URL" ]; then break; fi
             sleep 1
@@ -264,57 +252,53 @@ jobs:
             exit 1
           fi
           echo "TUNNEL_URL=$TUNNEL_URL" >> "$GITHUB_OUTPUT"
-
-      # ── 9. Verify the tunnel actually reaches the gateway ──
-      - name: Verify tunnel reachability
-        env:
-          OPENCLAW_TOKEN: '${{ steps.config.outputs.token }}'
-        run: |
-          TUNNEL_URL="${{ steps.tunnel.outputs.TUNNEL_URL }}"
-          echo "TUNNEL_URL=$TUNNEL_URL"
-          # BUG FIX: the control UI may be auth-gated. Any of 200/401/403 means the
-          # tunnel successfully reaches the gateway, so we accept those.
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+          echo "✅ tunnel acquired: $TUNNEL_URL"
+          # --- verify tunnel reaches gateway (any non-000 = origin reachable) ---
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
             -H "Authorization: Bearer $OPENCLAW_TOKEN" "$TUNNEL_URL/" || echo "000")
-          echo "CONTROL_UI_HTTP_STATUS=$HTTP_CODE"
-          if [ "$HTTP_CODE" = "000" ]; then
-            echo "❌ Tunnel could not reach the gateway (HTTP 000 / connection failed)"
-            echo "=== cloudflared.log ==="
-            tail -15 /tmp/cloudflared.log 2>/dev/null
+          echo "CONTROL_UI_HTTP_STATUS=$CODE"
+          if [ "$CODE" = "000" ]; then
+            echo "❌ Tunnel could not reach the gateway (connection failed)"
             exit 1
           fi
-          echo "✅ Tunnel reaches the OpenClaw gateway (HTTP $HTTP_CODE)"
-
-      - name: Emit connection details
-        env:
-          OPENCLAW_TOKEN: '${{ steps.config.outputs.token }}'
-          TUNNEL_URL: ${{ steps.tunnel.outputs.TUNNEL_URL }}
-          SESSION_KEY: ${{ steps.config.outputs.SESSION_KEY_USED }}
-        run: |
+          # 200 = UI served. 401/403 also means origin reachable and responding.
+          if [ "$CODE" = "200" ] || [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
+            echo "✅ Tunnel reaches the OpenClaw gateway (HTTP $CODE)"
+          else
+            echo "⚠️ Tunnel reached gateway but HTTP $CODE (auth may be gating /). UI may need the token."
+          fi
+          # --- emit details ---
+          DURATION="${{ inputs.duration || '7200' }}"
           echo "================================"
           echo " OpenClaw Web UI is ready!"
           echo "================================"
           echo "FINAL_URL=$TUNNEL_URL"
-          echo "GATEWAY_TOKEN=$OPENCLAW_TOKEN"
-          echo "SESSION_KEY=$SESSION_KEY"
+          echo "GATEWAY_TOKEN=***"
+          echo "SESSION_KEY=${{ steps.config.outputs.SESSION_KEY_USED }}"
           echo "Open the URL in your browser — enter the token at the auth prompt."
           {
             echo "# OpenClaw Web UI is ready"
             echo ""
             echo "**URL:** $TUNNEL_URL"
             echo ""
-            echo "**Gateway token:** \`$OPENCLAW_TOKEN\`"
+            echo "**Gateway token:** \`$(if [ -z "$OPENCLAW_TOKEN" ]; then echo "(generated — see run logs)"; else echo "$OPENCLAW_TOKEN"; fi)\`"
             echo ""
             echo "Open the URL in your browser and enter the token when prompted."
           } >> "$GITHUB_STEP_SUMMARY"
+          # --- stay alive for the requested duration ---
+          echo "Keeping OpenClaw alive for $DURATION seconds..."
+          ALIVE=0
+          for i in $(seq 1 "$DURATION"); do
+            if ! kill -0 $GW_PID 2>/dev/null && ! kill -0 $CF_PID 2>/dev/null; then
+              echo "❌ Both gateway and cloudflared exited early"
+              break
+            fi
+            sleep 1
+            ALIVE=$i
+          done
+          echo "Ran for $ALIVE seconds (requested $DURATION)."
 
-      - name: Keep running for the specified duration
-        run: |
-          DURATION="${{ inputs.duration || '7200' }}"
-          echo "Keeping OpenClaw alive for $DURATION seconds."
-          sleep "$DURATION"
-          echo "Duration complete."
-
+      # ── 8. Final logs ──
       - name: Final logs
         if: always()
         run: |
@@ -323,3 +307,6 @@ jobs:
           echo ""
           echo "=== Cloudflared Log (tail) ==="
           tail -15 /tmp/cloudflared.log 2>/dev/null || echo "(no cloudflared log)"
+          echo ""
+          echo "=== trycloudflare URL ==="
+          grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1 || echo "(none)"
