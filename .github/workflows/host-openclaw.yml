@@ -98,6 +98,7 @@ jobs:
           SESSION_KEY: '${{ secrets.SESSION_KEY }}'
         run: |
           WORKSPACE_DIR="$HOME/openclaw-workspace"
+          mkdir -p "$HOME/.openclaw"
           # BUG FIX: if the token secret is empty, generate one so the emitted
           # token is always valid (otherwise the user could never log in).
           OPENCLAW_TOKEN="${OPENCLAW_TOKEN_IN:-$(openssl rand -hex 24)}"
