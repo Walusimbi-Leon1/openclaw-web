@@ -90,15 +90,14 @@ jobs:
           mkdir -p "$HOME/.openclaw"
           
           # Handle Token: Priority Secret > Fixed Fallback
-          FINAL_TOKEN="$OPENCLAW_TOKEN_IN"
+          FINAL_TOKEN="$OPENC…N_IN"
           if [ -z "$FINAL_TOKEN" ]; then
-            FINAL_TOKEN="la5-colab-8133ea97d77b5c47"
+            FINAL_TOKEN="la5-co…5c47"
           fi
           
           echo "token=$FINAL_TOKEN" >> "$GITHUB_OUTPUT"
-          echo "OPENCLAW_TOKEN=$FINAL_TOKEN" >> "$GITHUB_ENV"
+          echo "OPENCLAW_TOKEN=***" >> "$GITHUB_ENV"
           
-          # Create config using the variables directly to avoid sed errors
           cat << EOF > "$HOME/.openclaw/openclaw.json"
           {
             "agents": {
