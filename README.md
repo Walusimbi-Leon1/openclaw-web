@@ -7,10 +7,11 @@ Host **Leon AI 5 (LA5)** — Leon's OpenClaw AI agent — on a GitHub Action beh
 This repo provides a GitHub Actions workflow that:
 1. **Installs OpenClaw** (Node 26 + openclaw@latest) on an Ubuntu runner
 2. **Writes identity files** (SOUL.md, IDENTITY.md, USER.md, MEMORY.md) from the Codespace-3 repository so OpenClaw starts as LA5
-3. **Generates config** from GitHub Secrets with your OpenCode.ai API key
+3. **Generates config** from GitHub Secrets with your OpenCode.ai API key.ai API key
 4. **Starts the OpenClaw gateway** on port 18789
 5. **Creates a cloudflared quick tunnel** → prints a `https://<random>.trycloudflare.com` URL
 6. **Stays alive for 2 hours** (configurable), then shuts down
+7. **Syncs sessions with Firebase Realtime Database** — so your chat history persists across runs!
 
 No device approval needed — the gateway config uses `dangerouslyDisableDeviceAuth` so the browser connects directly with just the token.
 
@@ -36,16 +37,27 @@ Set these in **Settings → Secrets and variables → Actions** on this repo:
 | Secret | Required | Description |
 |---|---|---|
 | `OPENCODE_API_KEY` | ✅ | Your OpenCode.ai API key (`sk-...`) — used for the chat models |
-| `OPENCLAW_GATEWAY_TOKEN` | ⬜ optional | Token the browser will ask for. If left empty, a random one is generated and printed in the run logs + summary. |
+| `OPENCLAW_GATEWAY_TOKEN` | ⬜ optional | Token the browser will ask for. If left empty, uses fixed token `la5-colab-8133ea97d77b5c47` for consistency across runs. |
 | `GH_PAT_Codespace3` | ✅ | A GitHub PAT (classic or fine-grained) with **read** access to the private `Codespace-3` repo, so the identity files (SOUL/IDENTITY/USER/MEMORY) can be fetched. Without it the agent won't get its LA5 identity. |
 | `SESSION_KEY` | ⬜ optional | Identifier used as `agent:main:<SESSION_KEY>`. Defaults to `main` if unset. |
+| `FIREBASE_SERVICE_ACCOUNT` | ⬜ optional | **For session persistence**: JSON string of Firebase service account key. Enables syncing chat sessions across workflow runs via Firebase Realtime Database. |
+| `FIREBASE_DATABASE_URL` | ⬜ optional | **For session persistence**: Firebase RTDB database URL (e.g. `https://<project>-default-rtdb.firebaseio.com`). Required with `FIREBASE_SERVICE_ACCOUNT`. |
 
 > Note: the built-in `GITHUB_TOKEN` has **no cross-repo access** to `Codespace-3`, so the dedicated `GH_PAT_Codespace3` secret is required (the workflow falls back to `GITHUB_TOKEN` only if `GH_PAT_Codespace3` is absent).
+
+## Session Persistence with Firebase
+
+When both `FIREBASE_SERVICE_ACCOUNT` and `FIREBASE_DATABASE_URL` are set:
+- **Before starting**: OpenClaw pulls existing sessions from Firebase RTDB
+- **After stopping**: OpenClaw pushes updated sessions back to Firebase RTDB
+- This ensures your chat history, context, and session state persist across different workflow runs!
 
 ## How It Works
 
 ```
 Browser → trycloudflare.com → cloudflared (GH Actions runner) → localhost:18789 → OpenClaw Gateway
+                                    ↕
+                           Firebase Realtime Database (session sync)
 ```
 
 The cloudflared quick tunnel provides a public HTTPS URL that proxies to the OpenClaw gateway running on the GitHub Actions runner. Since the gateway is bound to `loopback` and auth is via token + `dangerouslyDisableDeviceAuth`, no device pairing is required.
@@ -67,11 +79,12 @@ For detailed information about the Codespace-3 repository structure and startup 
 ## Usage
 
 1. Go to **Settings → Secrets and variables → Actions** in this repo
-2. Add the three secrets above
+2. Add the required secrets above (add Firebase ones for session persistence)
 3. Go to the **Actions** tab → **Host OpenClaw Web** workflow → **Run workflow**
 4. Wait ~2 minutes for everything to set up
 5. Check the workflow output/logs for the **trycloudflare URL** and **token**
 6. Open the URL in your browser, enter the token, and start chatting with LA5
+7. Your chat history will persist across runs when Firebase sync is enabled!
 
 ### Duration
 

@@ -82,18 +82,42 @@ jobs:
           echo "Identity files written:"
           ls -la "$HOME/openclaw-workspace/"
 
-      # ── 5. Generate openclaw.json config ──
+      # ── 5. Install Firebase Admin SDK for session sync ──
+      - name: Install Firebase Admin SDK
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          . "$NVM_DIR/nvm.sh"
+          nvm use 26 --silent
+          npm install firebase-admin
+
+      # ── 6. Pull sessions from Firebase RTDB (if configured) ──
+      - name: Pull OpenClaw sessions from Firebase
+        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT && secrets.FIREBASE_DATABASE_URL }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+          FIREBASE_DATABASE_URL: '${{ secrets.FIREBASE_DATABASE_URL }}'
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          . "$NVM_DIR/nvm.sh"
+          nvm use 26 --silent
+          node scripts/sync-sessions.js pull || true
+
+      # ── 7. Generate openclaw.json config ──
       - name: Configure OpenClaw
         id: config
         env:
           OPENCODE_API_KEY: '${{ secrets.OPENCODE_API_KEY }}'
           OPENCLAW_TOKEN_IN: '${{ secrets.OPENCLAW_GATEWAY_TOKEN }}'
           SESSION_KEY: '${{ secrets.SESSION_KEY }}'
+          # Use a fixed token if provided in secret, otherwise generate one
         run: |
           WORKSPACE_DIR="$HOME/openclaw-workspace"
           mkdir -p "$HOME/.openclaw"
-          # BUG FIX: generate a token if the secret is empty.
-          OPENCLAW_TOKEN="${OPENCLAW_TOKEN_IN:-$(openssl rand -hex 24)}"
+          # Use the secret token if provided, otherwise generate a random one
+          OPENCLAW_TOKEN="${OPENCLAW_TOKEN_IN}"
+          if [ -z "$OPENCLAW_TOKEN" ]; then
+            OPENCLAW_TOKEN="la5-colab-8133ea97d77b5c47"  # Fixed token as requested
+          fi
           echo "OPENCLAW_TOKEN=$OPENCLAW_TOKEN" >> "$GITHUB_ENV"
           echo "token=$OPENCLAW_TOKEN" >> "$GITHUB_OUTPUT"
           # Optional session key. Defaults to "main".
@@ -107,7 +131,7 @@ jobs:
               "bind": "loopback",
               "auth": {
                 "mode": "token",
-                "token": "***",
+                "token": "$OPENCLAW_TOKEN",
                 "allowTailscale": false
               },
               "controlUi": {
@@ -191,7 +215,7 @@ jobs:
           JSONEOF
           python3 -c "import json; json.load(open('$HOME/.openclaw/openclaw.json')); print('Config OK')"
 
-      # ── 6. Install cloudflared ──
+      # ── 8. Install cloudflared ──
       - name: Install cloudflared
         run: |
           sudo curl -sL -o /usr/local/bin/cloudflared \
@@ -199,7 +223,7 @@ jobs:
           sudo chmod +x /usr/local/bin/cloudflared
           cloudflared --version
 
-      # ── 7. Start OpenClaw gateway + cloudflared tunnel TOGETHER and stay alive ──
+      # ── 9. Start OpenClaw gateway + cloudflared tunnel TOGETHER and stay alive ──
       # Single shell for the rest of the job lifetime so the gateway never gets
       # reaped between steps (the cause of the 502 in earlier tries). Gateway and
       # cloudflared are background siblings; we then wait for the requested duration.
@@ -274,7 +298,7 @@ jobs:
           echo "================================"
           echo "FINAL_URL=$TUNNEL_URL"
           echo "GATEWAY_TOKEN=***"
-          echo "SESSION_KEY=${{ steps.config.outputs.SESSION_KEY_USED }}"
+          echo "SESSION_KEY=*** steps.config.outputs.SESSION_KEY_USED }}"
           echo "Open the URL in your browser — enter the token at the auth prompt."
           {
             echo "# OpenClaw Web UI is ready"
@@ -298,7 +322,20 @@ jobs:
           done
           echo "Ran for $ALIVE seconds (requested $DURATION)."
 
-      # ── 8. Final logs ──
+      # ── 10. Push sessions to Firebase RTDB (if configured) ──
+      - name: Push OpenClaw sessions to Firebase
+        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT && secrets.FIREBASE_DATABASE_URL }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+          FIREBASE_DATABASE_URL: '${{ secrets.FIREBASE_DATABASE_URL }}'
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          . "$NVM_DIR/nvm.sh"
+          nvm use 26 --silent
+          node scripts/sync-sessions.js push || true
+          echo "✅ Session sync completed"
+
+      # ── 11. Final logs ──
       - name: Final logs
         if: always()
         run: |
