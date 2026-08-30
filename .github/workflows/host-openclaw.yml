@@ -89,14 +89,12 @@ jobs:
           WORKSPACE_DIR="$HOME/openclaw-workspace"
           mkdir -p "$HOME/.openclaw"
           
-          # Handle Token: Priority Secret > Fixed Fallback
-          FINAL_TOKEN="$OPENC…N_IN"
-          if [ -z "$FINAL_TOKEN" ]; then
-            FINAL_TOKEN="la5-co…5c47"
-          fi
+          # ABSOLUTE FIX: We ignore the secret and FORCE the token Leon wants.
+          # This removes all ambiguity about what is in the GitHub Secrets vault.
+          FINAL_TOKEN="la5-colab-8133ea97d77b5c47"
           
           echo "token=$FINAL_TOKEN" >> "$GITHUB_OUTPUT"
-          echo "OPENCLAW_TOKEN=***" >> "$GITHUB_ENV"
+          echo "OPENCLAW_TOKEN=$FINAL_TOKEN" >> "$GITHUB_ENV"
           
           cat << EOF > "$HOME/.openclaw/openclaw.json"
           {
