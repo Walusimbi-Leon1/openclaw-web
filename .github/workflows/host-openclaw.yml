@@ -149,12 +149,9 @@ jobs:
               "tailscale": { "mode": "off", "resetOnExit": false }
             },
             "agents": {
-              "defaults": {
-                "workspace": "$WORKSPACE_DIR",
-                "model": { "primary": "oc-hy3-free/hy3-free" },
-                "timeoutSeconds": 86400
-              },
-              "main": { "workspace": "$WORKSPACE_DIR" }
+              "main": {
+                "workspace": "$WORKSPACE_DIR"
+              }
             },
             "models": {
               "mode": "merge",
@@ -233,7 +230,6 @@ jobs:
         env:
           OPENCLAW_TOKEN: '${{ steps.config.outputs.token }}'
         run: |
-          # Use absolute path for nvm setup to ensure background processes find it
           NVM_SH="$HOME/.nvm/nvm.sh"
           
           echo "Starting OpenClaw gateway on 127.0.0.1:18789..."
@@ -298,7 +294,7 @@ jobs:
           echo "================================"
           echo "FINAL_URL=$TUNNEL_URL"
           echo "GATEWAY_TOKEN=***"
-          echo "SESSION_KEY=${{ steps.config.outputs.SESSION_KEY_USED }}"
+          echo "SESSION_KEY=*** steps.config.outputs.SESSION_KEY_USED }}"
           
           {
             echo "# OpenClaw Web UI is ready"
