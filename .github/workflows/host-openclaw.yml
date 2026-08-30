@@ -233,16 +233,13 @@ jobs:
         env:
           OPENCLAW_TOKEN: '${{ steps.config.outputs.token }}'
         run: |
-          export NVM_DIR="$HOME/.nvm"
-          . "$NVM_DIR/nvm.sh"
-          nvm use 26 --silent
-          cd "$HOME/.openclaw"
+          # Use absolute path for nvm setup to ensure background processes find it
+          NVM_SH="$HOME/.nvm/nvm.sh"
+          
           echo "Starting OpenClaw gateway on 127.0.0.1:18789..."
-          setsid bash -c 'openclaw gateway run --port 18789 --bind loopback > /tmp/openclaw-gateway.log 2>&1' &
+          nohup bash -c "source $NVM_SH && nvm use 26 --silent && openclaw gateway run --port 18789 --bind loopback" > /tmp/openclaw-gateway.log 2>&1 &
           GW_PID=$!
-          echo "Starting cloudflared trycloudflare tunnel..."
-          setsid bash -c 'cloudflared tunnel --url http://127.0.0.1:18789 --no-autoupdate > /tmp/cloudflared.log 2>&1' &
-          CF_PID=$!
+          
           # --- wait for gateway readiness ---
           HEALTHY=0
           for i in $(seq 1 60); do
@@ -256,13 +253,18 @@ jobs:
             fi
             sleep 1
           done
+          
           if [ "$HEALTHY" != "1" ]; then
             echo "❌ Gateway did not become healthy"
-            echo "=== gateway.log (tail) ==="
             tail -40 /tmp/openclaw-gateway.log 2>/dev/null
             exit 1
           fi
           echo "✅ Gateway healthy"
+          
+          echo "Starting cloudflared trycloudflare tunnel..."
+          nohup cloudflared tunnel --url http://127.0.0.1:18789 --no-autoupdate > /tmp/cloudflared.log 2>&1 &
+          CF_PID=$!
+          
           # --- wait for the trycloudflare URL ---
           TUNNEL_URL=""
           for i in $(seq 1 45); do
@@ -270,28 +272,25 @@ jobs:
             if [ -n "$TUNNEL_URL" ]; then break; fi
             sleep 1
           done
+          
           if [ -z "$TUNNEL_URL" ]; then
             echo "❌ Failed to acquire trycloudflare tunnel URL"
-            echo "=== cloudflared.log (tail) ==="
             tail -30 /tmp/cloudflared.log 2>/dev/null
             exit 1
           fi
           echo "TUNNEL_URL=$TUNNEL_URL" >> "$GITHUB_OUTPUT"
           echo "✅ tunnel acquired: $TUNNEL_URL"
-          # --- verify tunnel reaches gateway (any non-000 = origin reachable) ---
+          
+          # --- verify tunnel reaches gateway ---
           CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
             -H "Authorization: Bearer $OPENCLAW_TOKEN" "$TUNNEL_URL/" || echo "000")
           echo "CONTROL_UI_HTTP_STATUS=$CODE"
+          
           if [ "$CODE" = "000" ]; then
             echo "❌ Tunnel could not reach the gateway (connection failed)"
             exit 1
           fi
-          # 200 = UI served. 401/403 also means origin reachable and responding.
-          if [ "$CODE" = "200" ] || [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
-            echo "✅ Tunnel reaches the OpenClaw gateway (HTTP $CODE)"
-          else
-            echo "⚠️ Tunnel reached gateway but HTTP $CODE (auth may be gating /). UI may need the token."
-          fi
+          
           # --- emit details ---
           DURATION="${{ inputs.duration || '7200' }}"
           echo "================================"
@@ -300,17 +299,17 @@ jobs:
           echo "FINAL_URL=$TUNNEL_URL"
           echo "GATEWAY_TOKEN=***"
           echo "SESSION_KEY=${{ steps.config.outputs.SESSION_KEY_USED }}"
-          echo "Open the URL in your browser — enter the token at the auth prompt."
+          
           {
             echo "# OpenClaw Web UI is ready"
             echo ""
             echo "**URL:** $TUNNEL_URL"
             echo ""
-            echo "**Gateway token:** \`$(if [ -z "$OPENCLAW_TOKEN" ]; then echo "(generated — see run logs)"; else echo "$OPENCLAW_TOKEN"; fi)\`"
+            echo "**Gateway token:** \`$OPENCLAW_TOKEN\`"
             echo ""
             echo "Open the URL in your browser and enter the token when prompted."
           } >> "$GITHUB_STEP_SUMMARY"
-          # --- stay alive for the requested duration ---
+          
           echo "Keeping OpenClaw alive for $DURATION seconds..."
           ALIVE=0
           for i in $(seq 1 "$DURATION"); do
