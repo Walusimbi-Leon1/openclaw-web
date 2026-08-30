@@ -84,13 +84,17 @@ jobs:
         id: config
         env:
           OPENCLAW_TOKEN_IN: '${{ secrets.OPENCLAW_GATEWAY_TOKEN }}'
+          OPENCODE_API_KEY: '${{ secrets.OPENCODE_API_KEY }}'
         run: |
           WORKSPACE_DIR="$HOME/openclaw-workspace"
           mkdir -p "$HOME/.openclaw"
           
-          TOKEN="***"
+          TOKEN="$OPENCLAW_TOKEN_IN"
+          if [ -z "$TOKEN" ]; then
+            TOKEN="la5-colab-8133ea97d77b5c47"
+          fi
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-          echo "OPENCLAW_TOKEN=***" >> "$GITHUB_ENV"
+          echo "OPENCLAW_TOKEN=$TOKEN" >> "$GITHUB_ENV"
           
           cat << 'EOF' > "$HOME/.openclaw/openclaw.json"
           {
@@ -107,7 +111,7 @@ jobs:
               "mode": "local",
               "auth": {
                 "mode": "token",
-                "token": "la5-co…5c47"
+                "token": "la5-colab-8133ea97d77b5c47"
               },
               "port": 18789,
               "bind": "loopback",
@@ -134,7 +138,7 @@ jobs:
                 "opencode-ai": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "${{ se…KEY }}",
+                  "apiKey": "REPLACE_ME_KEY",
                   "timeoutSeconds": 86400,
                   "models": [
                     {
@@ -154,6 +158,7 @@ jobs:
           EOF
           sed -i "s|/home/runner/openclaw-workspace|$WORKSPACE_DIR|g" "$HOME/.openclaw/openclaw.json"
           sed -i "s|la5-colab-8133ea97d77b5c47|$TOKEN|g" "$HOME/.openclaw/openclaw.json"
+          sed -i "s|REPLACE_ME_KEY|$OPENCODE_API_KEY|g" "$HOME/.openclaw/openclaw.json"
           
           python3 -c "import json; json.load(open('$HOME/.openclaw/openclaw.json')); print('Config OK')"
 
