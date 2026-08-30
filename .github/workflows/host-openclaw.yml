@@ -92,7 +92,6 @@ jobs:
 
       # ── 6. Pull sessions from Firebase RTDB (if configured) ──
       - name: Pull OpenClaw sessions from Firebase
-        if: ${{ and(secrets.FIREBASE_SERVICE_ACCOUNT != '', secrets.FIREBASE_DATABASE_URL != '') }}
         env:
           FIREBASE_SERVICE_ACCOUNT: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
           FIREBASE_DATABASE_URL: '${{ secrets.FIREBASE_DATABASE_URL }}'
@@ -324,7 +323,6 @@ jobs:
 
       # ── 10. Push sessions to Firebase RTDB (if configured) ──
       - name: Push OpenClaw sessions to Firebase
-        if: ${{ and(secrets.FIREBASE_SERVICE_ACCOUNT != '', secrets.FIREBASE_DATABASE_URL != '') }}
         env:
           FIREBASE_SERVICE_ACCOUNT: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
           FIREBASE_DATABASE_URL: '${{ secrets.FIREBASE_DATABASE_URL }}'
