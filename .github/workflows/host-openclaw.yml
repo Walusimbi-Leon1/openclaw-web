@@ -79,7 +79,7 @@ jobs:
           nvm use 26 --silent
           node scripts/sync-sessions.js pull || true
 
-      # ── 7. Generate openclaw.json config (using the provided working structure) ──
+      # ── 7. Generate openclaw.json config ──
       - name: Configure OpenClaw
         id: config
         env:
@@ -88,9 +88,9 @@ jobs:
           WORKSPACE_DIR="$HOME/openclaw-workspace"
           mkdir -p "$HOME/.openclaw"
           
-          TOKEN="${OPENCLAW_TOKEN_IN:-la5-colab-8133ea97d77b5c47}"
+          TOKEN="***"
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-          echo "OPENCLAW_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          echo "OPENCLAW_TOKEN=***" >> "$GITHUB_ENV"
           
           cat << 'EOF' > "$HOME/.openclaw/openclaw.json"
           {
@@ -107,7 +107,7 @@ jobs:
               "mode": "local",
               "auth": {
                 "mode": "token",
-                "token": "la5-colab-8133ea97d77b5c47"
+                "token": "la5-co…5c47"
               },
               "port": 18789,
               "bind": "loopback",
@@ -116,12 +116,10 @@ jobs:
                 "resetOnExit": false
               },
               "controlUi": {
-                "allowedOrigins": [
-                  "http://localhost:18789",
-                  "http://127.0.0.1:18789"
-                ],
+                "allowedOrigins": ["*"],
                 "dangerouslyAllowHostHeaderOriginFallback": true,
-                "dangerouslyDisableDeviceAuth": true
+                "dangerouslyDisableDeviceAuth": true,
+                "allowInsecureAuth": true
               }
             },
             "session": {
@@ -136,7 +134,7 @@ jobs:
                 "opencode-ai": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "${{ secrets.OPENCODE_API_KEY }}",
+                  "apiKey": "${{ se…KEY }}",
                   "timeoutSeconds": 86400,
                   "models": [
                     {
@@ -154,9 +152,7 @@ jobs:
             }
           }
           EOF
-          # Fix the workspace path dynamically since /home/runner is the GH default
           sed -i "s|/home/runner/openclaw-workspace|$WORKSPACE_DIR|g" "$HOME/.openclaw/openclaw.json"
-          # Fix the token dynamically
           sed -i "s|la5-colab-8133ea97d77b5c47|$TOKEN|g" "$HOME/.openclaw/openclaw.json"
           
           python3 -c "import json; json.load(open('$HOME/.openclaw/openclaw.json')); print('Config OK')"
@@ -180,7 +176,6 @@ jobs:
           nohup bash -c "source $NVM_SH && nvm use 26 --silent && openclaw gateway run --port 18789 --bind loopback" > /tmp/openclaw-gateway.log 2>&1 &
           GW_PID=$!
           
-          # --- STRICT readiness check ---
           echo "Waiting for gateway to fully initialize..."
           HEALTHY=0
           for i in $(seq 1 60); do
@@ -216,19 +211,18 @@ jobs:
           fi
           echo "TUNNEL_URL=$TUNNEL_URL" >> "$GITHUB_OUTPUT"
           
-          # --- FINAL VERIFICATION: Ping the UI through the tunnel ---
           echo "Verifying tunnel connectivity..."
           T_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
             -H "Authorization: Bearer $OPENCLAW_TOKEN" "$TUNNEL_URL/" || echo "000")
           
           if [ "$T_CODE" = "000" ]; then
-            echo "❌ Tunnel exists but cannot reach Gateway. 502 likely."
+            echo "❌ Tunnel exists but cannot reach Gateway."
             exit 1
           fi
           echo "✅ Tunnel verified (HTTP $T_CODE)"
           
           echo "FINAL_URL=$TUNNEL_URL"
-          echo "GATEWAY_TOKEN=$OPENCLAW_TOKEN"
+          echo "GATEWAY_TOKEN=***"
           
           {
             echo "# OpenClaw Web UI is ready"
