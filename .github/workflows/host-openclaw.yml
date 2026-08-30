@@ -107,21 +107,26 @@ jobs:
         env:
           OPENCODE_API_KEY: '${{ secrets.OPENCODE_API_KEY }}'
           OPENCLAW_TOKEN_IN: '${{ secrets.OPENCLAW_GATEWAY_TOKEN }}'
-          SESSION_KEY: '${{ secrets.SESSION_KEY }}'
-          # Use a fixed token if provided in secret, otherwise generate one
+          SESSION_KEY_IN: '${{ secrets.SESSION_KEY }}'
         run: |
           WORKSPACE_DIR="$HOME/openclaw-workspace"
           mkdir -p "$HOME/.openclaw"
-          # Use the secret token if provided, otherwise use the fixed token
-          OPENCLAW_TOKEN="${OPEN…_IN}"
+          
+          # Gateway Token
+          OPENCLAW_TOKEN="$OPENCLAW_TOKEN_IN"
           if [ -z "$OPENCLAW_TOKEN" ]; then
-            OPENCLAW_TOKEN="la5-colab-8133ea97d77b5c47"  # Fixed token as requested
+            OPENCLAW_TOKEN="la5-colab-8133ea97d77b5c47"
           fi
           echo "OPENCLAW_TOKEN=$OPENCLAW_TOKEN" >> "$GITHUB_ENV"
           echo "token=$OPENCLAW_TOKEN" >> "$GITHUB_OUTPUT"
-          # Optional session key. Defaults to "main".
-          SKEY="${SESS…ain}"
+          
+          # Session Key
+          SKEY="$SESSION_KEY_IN"
+          if [ -z "$SKEY" ]; then
+            SKEY="main"
+          fi
           echo "SESSION_KEY_USED=$SKEY" >> "$GITHUB_OUTPUT"
+          
           cat > "$HOME/.openclaw/openclaw.json" << JSONEOF
           {
             "gateway": {
@@ -130,7 +135,7 @@ jobs:
               "bind": "loopback",
               "auth": {
                 "mode": "token",
-                "token": "***",
+                "token": "$OPENCLAW_TOKEN",
                 "allowTailscale": false
               },
               "controlUi": {
@@ -157,7 +162,7 @@ jobs:
                 "oc-hy3-free": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "${OPEN…_KEY}",
+                  "apiKey": "$OPENCODE_API_KEY",
                   "timeoutSeconds": 86400,
                   "models": [{
                     "id": "hy3-free", "name": "oc/hy3-free (Primary)",
@@ -170,7 +175,7 @@ jobs:
                 "oc-nemotron-3.5-lightning-free": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "${OPEN…_KEY}",
+                  "apiKey": "$OPENCODE_API_KEY",
                   "timeoutSeconds": 86400,
                   "models": [{
                     "id": "nemotron-3.5-lightning-free", "name": "oc/nemotron-3.5-lightning-free (Fast)",
@@ -183,7 +188,7 @@ jobs:
                 "oc-laguna-s-2.1-free": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "${OPEN…_KEY}",
+                  "apiKey": "$OPENCODE_API_KEY",
                   "timeoutSeconds": 86400,
                   "models": [{
                     "id": "laguna-s-2.1-free", "name": "oc/laguna-s-2.1-free (Fallback)",
@@ -196,7 +201,7 @@ jobs:
                 "custom-opencode-ai": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "${OPEN…_KEY}",
+                  "apiKey": "$OPENCODE_API_KEY",
                   "timeoutSeconds": 86400,
                   "models": [{
                     "id": "big-pickle", "name": "big-pickle (Last Resort)",
@@ -223,9 +228,6 @@ jobs:
           cloudflared --version
 
       # ── 9. Start OpenClaw gateway + cloudflared tunnel TOGETHER and stay alive ──
-      # Single shell for the rest of the job lifetime so the gateway never gets
-      # reaped between steps (the cause of the 502 in earlier tries). Gateway and
-      # cloudflared are background siblings; we then wait for the requested duration.
       - name: Run OpenClaw behind trycloudflare tunnel
         id: run
         env:
@@ -297,7 +299,7 @@ jobs:
           echo "================================"
           echo "FINAL_URL=$TUNNEL_URL"
           echo "GATEWAY_TOKEN=***"
-          echo "SESSION_KEY=*** steps.config.outputs.SESSION_KEY_USED }}"
+          echo "SESSION_KEY=${{ steps.config.outputs.SESSION_KEY_USED }}"
           echo "Open the URL in your browser — enter the token at the auth prompt."
           {
             echo "# OpenClaw Web UI is ready"
