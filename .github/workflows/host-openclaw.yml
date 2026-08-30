@@ -89,18 +89,21 @@ jobs:
           WORKSPACE_DIR="$HOME/openclaw-workspace"
           mkdir -p "$HOME/.openclaw"
           
-          TOKEN="$OPENCLAW_TOKEN_IN"
-          if [ -z "$TOKEN" ]; then
-            TOKEN="la5-colab-8133ea97d77b5c47"
+          # Handle Token: Priority Secret > Fixed Fallback
+          FINAL_TOKEN="$OPENCLAW_TOKEN_IN"
+          if [ -z "$FINAL_TOKEN" ]; then
+            FINAL_TOKEN="la5-colab-8133ea97d77b5c47"
           fi
-          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-          echo "OPENCLAW_TOKEN=$TOKEN" >> "$GITHUB_ENV"
           
-          cat << 'EOF' > "$HOME/.openclaw/openclaw.json"
+          echo "token=$FINAL_TOKEN" >> "$GITHUB_OUTPUT"
+          echo "OPENCLAW_TOKEN=$FINAL_TOKEN" >> "$GITHUB_ENV"
+          
+          # Create config using the variables directly to avoid sed errors
+          cat << EOF > "$HOME/.openclaw/openclaw.json"
           {
             "agents": {
               "defaults": {
-                "workspace": "/home/runner/openclaw-workspace",
+                "workspace": "$WORKSPACE_DIR",
                 "model": {
                   "primary": "opencode-ai/big-pickle"
                 },
@@ -111,7 +114,7 @@ jobs:
               "mode": "local",
               "auth": {
                 "mode": "token",
-                "token": "la5-colab-8133ea97d77b5c47"
+                "token": "$FINAL_TOKEN"
               },
               "port": 18789,
               "bind": "loopback",
@@ -138,7 +141,7 @@ jobs:
                 "opencode-ai": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "REPLACE_ME_KEY",
+                  "apiKey": "$OPENCODE_API_KEY",
                   "timeoutSeconds": 86400,
                   "models": [
                     {
@@ -156,9 +159,6 @@ jobs:
             }
           }
           EOF
-          sed -i "s|/home/runner/openclaw-workspace|$WORKSPACE_DIR|g" "$HOME/.openclaw/openclaw.json"
-          sed -i "s|la5-colab-8133ea97d77b5c47|$TOKEN|g" "$HOME/.openclaw/openclaw.json"
-          sed -i "s|REPLACE_ME_KEY|$OPENCODE_API_KEY|g" "$HOME/.openclaw/openclaw.json"
           
           python3 -c "import json; json.load(open('$HOME/.openclaw/openclaw.json')); print('Config OK')"
 
