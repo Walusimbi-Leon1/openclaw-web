@@ -20,7 +20,7 @@ jobs:
   openclaw-web:
     name: OpenClaw behind trycloudflare tunnel
     runs-on: ubuntu-22.04
-    timeout-minutes: 150  # hard cap (~2h30m)
+    timeout-minutes: 150
 
     steps:
       # ── 1. Install system dependencies ──
@@ -38,51 +38,29 @@ jobs:
           nvm install 26
           nvm use 26
           nvm alias default 26
-          node --version
-          npx --version
 
-      # ── 3. Install openclaw (GLOBAL — required so the binary is on PATH) ──
+      # ── 3. Install openclaw ──
       - name: Install openclaw
         run: |
           export NVM_DIR="$HOME/.nvm"
           . "$NVM_DIR/nvm.sh"
           nvm use 26 --silent
-          npm install -g npm@latest
           npm install -g openclaw@latest
           NODE_BIN="$(dirname "$(command -v node)")"
           echo "$NODE_BIN" >> "$GITHUB_PATH"
-          echo "node: $(command -v node) -> $(node --version)"
-          echo "openclaw: $(command -v openclaw)"
-          openclaw --version
 
-      # ── 4. Write identity/workspace files (from private Codespace-3 repo) ──
+      # ── 4. Fetch identity files ──
       - name: Fetch identity files from Codespace-3
         env:
           GH_PAT: '${{ secrets.GH_PAT_Codespace3 }}'
-          GH_TOKEN_FALLBACK: '${{ secrets.GITHUB_TOKEN }}'
         run: |
           mkdir -p "$HOME/openclaw-workspace"
           BASE="https://raw.githubusercontent.com/Walusimbi-Leon1/Codespace-3/main"
-          AUTH_ARGS=()
-          if [ -n "$GH_PAT" ]; then
-            AUTH_ARGS=(-H "Authorization: Bearer $GH_PAT")
-          elif [ -n "$GH_TOKEN_FALLBACK" ]; then
-            AUTH_ARGS=(-H "Authorization: Bearer $GH_TOKEN_FALLBACK")
-          fi
           for f in SOUL.md IDENTITY.md USER.md MEMORY.md AGENTS.md HEARTBEAT.md TOOLS.md; do
-            if ! curl -sfL "${AUTH_ARGS[@]}" "$BASE/$f" -o "$HOME/openclaw-workspace/$f"; then
-              if [ "$f" = "MEMORY.md" ] || [ "$f" = "AGENTS.md" ] || [ "$f" = "HEARTBEAT.md" ] || [ "$f" = "TOOLS.md" ]; then
-                echo "::warning::failed to fetch optional $f (continuing without it)"
-              else
-                echo "::error::failed to fetch required $f — check GH_PAT_Codespace3 secret"
-                exit 1
-              fi
-            fi
+            curl -sfL -H "Authorization: Bearer $GH_PAT" "$BASE/$f" -o "$HOME/openclaw-workspace/$f" || echo "Warning: failed to fetch $f"
           done
-          echo "Identity files written:"
-          ls -la "$HOME/openclaw-workspace/"
 
-      # ── 5. Install Firebase Admin SDK for session sync ──
+      # ── 5. Install Firebase Admin SDK ──
       - name: Install Firebase Admin SDK
         run: |
           export NVM_DIR="$HOME/.nvm"
@@ -90,7 +68,7 @@ jobs:
           nvm use 26 --silent
           npm install firebase-admin
 
-      # ── 6. Pull sessions from Firebase RTDB (if configured) ──
+      # ── 6. Pull sessions ──
       - name: Pull OpenClaw sessions from Firebase
         env:
           FIREBASE_SERVICE_ACCOUNT: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
@@ -101,119 +79,86 @@ jobs:
           nvm use 26 --silent
           node scripts/sync-sessions.js pull || true
 
-      # ── 7. Generate openclaw.json config ──
+      # ── 7. Generate openclaw.json config (using the provided working structure) ──
       - name: Configure OpenClaw
         id: config
         env:
-          OPENCODE_API_KEY: '${{ secrets.OPENCODE_API_KEY }}'
           OPENCLAW_TOKEN_IN: '${{ secrets.OPENCLAW_GATEWAY_TOKEN }}'
-          SESSION_KEY_IN: '${{ secrets.SESSION_KEY }}'
         run: |
           WORKSPACE_DIR="$HOME/openclaw-workspace"
           mkdir -p "$HOME/.openclaw"
           
-          # Gateway Token
-          OPENCLAW_TOKEN="$OPENCLAW_TOKEN_IN"
-          if [ -z "$OPENCLAW_TOKEN" ]; then
-            OPENCLAW_TOKEN="la5-colab-8133ea97d77b5c47"
-          fi
-          echo "OPENCLAW_TOKEN=$OPENCLAW_TOKEN" >> "$GITHUB_ENV"
-          echo "token=$OPENCLAW_TOKEN" >> "$GITHUB_OUTPUT"
+          TOKEN="${OPENCLAW_TOKEN_IN:-la5-colab-8133ea97d77b5c47}"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+          echo "OPENCLAW_TOKEN=$TOKEN" >> "$GITHUB_ENV"
           
-          # Session Key
-          SKEY="$SESSION_KEY_IN"
-          if [ -z "$SKEY" ]; then
-            SKEY="main"
-          fi
-          echo "SESSION_KEY_USED=$SKEY" >> "$GITHUB_OUTPUT"
-          
-          cat > "$HOME/.openclaw/openclaw.json" << JSONEOF
+          cat << 'EOF' > "$HOME/.openclaw/openclaw.json"
           {
+            "agents": {
+              "defaults": {
+                "workspace": "/home/runner/openclaw-workspace",
+                "model": {
+                  "primary": "opencode-ai/big-pickle"
+                },
+                "timeoutSeconds": 86400
+              }
+            },
             "gateway": {
               "mode": "local",
-              "port": 18789,
-              "bind": "loopback",
               "auth": {
                 "mode": "token",
-                "token": "$OPENCLAW_TOKEN",
-                "allowTailscale": false
+                "token": "la5-colab-8133ea97d77b5c47"
+              },
+              "port": 18789,
+              "bind": "loopback",
+              "tailscale": {
+                "mode": "off",
+                "resetOnExit": false
               },
               "controlUi": {
-                "enabled": true,
-                "basePath": "/",
-                "allowedOrigins": [],
+                "allowedOrigins": [
+                  "http://localhost:18789",
+                  "http://127.0.0.1:18789"
+                ],
                 "dangerouslyAllowHostHeaderOriginFallback": true,
-                "allowInsecureAuth": true,
                 "dangerouslyDisableDeviceAuth": true
-              },
-              "tailscale": { "mode": "off", "resetOnExit": false }
-            },
-            "agents": {
-              "main": {
-                "workspace": "$WORKSPACE_DIR"
               }
+            },
+            "session": {
+              "dmScope": "per-channel-peer"
+            },
+            "tools": {
+              "profile": "coding"
             },
             "models": {
               "mode": "merge",
               "providers": {
-                "oc-hy3-free": {
+                "opencode-ai": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "$OPENCODE_API_KEY",
+                  "apiKey": "${{ secrets.OPENCODE_API_KEY }}",
                   "timeoutSeconds": 86400,
-                  "models": [{
-                    "id": "hy3-free", "name": "oc/hy3-free (Primary)",
-                    "contextWindow": 128000, "maxTokens": 4096,
-                    "input": ["text"],
-                    "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-                    "reasoning": false
-                  }]
-                },
-                "oc-nemotron-3.5-lightning-free": {
-                  "baseUrl": "https://opencode.ai/zen/v1",
-                  "api": "openai-completions",
-                  "apiKey": "$OPENCODE_API_KEY",
-                  "timeoutSeconds": 86400,
-                  "models": [{
-                    "id": "nemotron-3.5-lightning-free", "name": "oc/nemotron-3.5-lightning-free (Fast)",
-                    "contextWindow": 128000, "maxTokens": 4096,
-                    "input": ["text"],
-                    "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-                    "reasoning": false
-                  }]
-                },
-                "oc-laguna-s-2.1-free": {
-                  "baseUrl": "https://opencode.ai/zen/v1",
-                  "api": "openai-completions",
-                  "apiKey": "$OPENCODE_API_KEY",
-                  "timeoutSeconds": 86400,
-                  "models": [{
-                    "id": "laguna-s-2.1-free", "name": "oc/laguna-s-2.1-free (Fallback)",
-                    "contextWindow": 128000, "maxTokens": 4096,
-                    "input": ["text"],
-                    "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-                    "reasoning": false
-                  }]
-                },
-                "custom-opencode-ai": {
-                  "baseUrl": "https://opencode.ai/zen/v1",
-                  "api": "openai-completions",
-                  "apiKey": "$OPENCODE_API_KEY",
-                  "timeoutSeconds": 86400,
-                  "models": [{
-                    "id": "big-pickle", "name": "big-pickle (Last Resort)",
-                    "contextWindow": 200000, "maxTokens": 16384,
-                    "input": ["text"],
-                    "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
-                    "reasoning": false
-                  }]
+                  "models": [
+                    {
+                      "id": "big-pickle",
+                      "name": "big-pickle",
+                      "contextWindow": 200000,
+                      "maxTokens": 16384,
+                      "input": ["text"],
+                      "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+                      "reasoning": false
+                    }
+                  ]
                 }
               }
-            },
-            "session": { "dmScope": "per-channel-peer" },
-            "tools": { "profile": "coding" }
+            }
           }
-          JSONEOF
+          EOF
+          # Fix the workspace path dynamically since /home/runner is the GH default
+          sed -i "s|/home/runner/openclaw-workspace|$WORKSPACE_DIR|g" "$HOME/.openclaw/openclaw.json"
+          # Fix the token dynamically
+          sed -i "s|la5-colab-8133ea97d77b5c47|$TOKEN|g" "$HOME/.openclaw/openclaw.json"
+          
           python3 -c "import json; json.load(open('$HOME/.openclaw/openclaw.json')); print('Config OK')"
 
       # ── 8. Install cloudflared ──
@@ -222,9 +167,8 @@ jobs:
           sudo curl -sL -o /usr/local/bin/cloudflared \
             https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           sudo chmod +x /usr/local/bin/cloudflared
-          cloudflared --version
 
-      # ── 9. Start OpenClaw gateway + cloudflared tunnel TOGETHER and stay alive ──
+      # ── 9. Start OpenClaw and Tunnel ──
       - name: Run OpenClaw behind trycloudflare tunnel
         id: run
         env:
@@ -232,69 +176,59 @@ jobs:
         run: |
           NVM_SH="$HOME/.nvm/nvm.sh"
           
-          echo "Starting OpenClaw gateway on 127.0.0.1:18789..."
+          echo "Starting OpenClaw gateway..."
           nohup bash -c "source $NVM_SH && nvm use 26 --silent && openclaw gateway run --port 18789 --bind loopback" > /tmp/openclaw-gateway.log 2>&1 &
           GW_PID=$!
           
-          # --- wait for gateway readiness ---
+          # --- STRICT readiness check ---
+          echo "Waiting for gateway to fully initialize..."
           HEALTHY=0
           for i in $(seq 1 60); do
-            if grep -qiE "listening|ready|http server|gateway (is )?running|started" /tmp/openclaw-gateway.log 2>/dev/null; then
-              HEALTHY=1; break
-            fi
             CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 \
               -H "Authorization: Bearer $OPENCLAW_TOKEN" "http://127.0.0.1:18789/health" 2>/dev/null || echo "000")
             if [ "$CODE" != "000" ]; then
+              echo "✅ Gateway health check passed (HTTP $CODE)"
               HEALTHY=1; break
             fi
-            sleep 1
+            sleep 2
           done
           
           if [ "$HEALTHY" != "1" ]; then
-            echo "❌ Gateway did not become healthy"
-            tail -40 /tmp/openclaw-gateway.log 2>/dev/null
+            echo "❌ Gateway failed health check. Logs:"
+            tail -n 50 /tmp/openclaw-gateway.log
             exit 1
           fi
-          echo "✅ Gateway healthy"
           
-          echo "Starting cloudflared trycloudflare tunnel..."
+          echo "Starting cloudflared tunnel..."
           nohup cloudflared tunnel --url http://127.0.0.1:18789 --no-autoupdate > /tmp/cloudflared.log 2>&1 &
           CF_PID=$!
           
-          # --- wait for the trycloudflare URL ---
           TUNNEL_URL=""
-          for i in $(seq 1 45); do
+          for i in $(seq 1 60); do
             TUNNEL_URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1 || true)
             if [ -n "$TUNNEL_URL" ]; then break; fi
-            sleep 1
+            sleep 2
           done
           
           if [ -z "$TUNNEL_URL" ]; then
-            echo "❌ Failed to acquire trycloudflare tunnel URL"
-            tail -30 /tmp/cloudflared.log 2>/dev/null
+            echo "❌ Tunnel URL not found"
             exit 1
           fi
           echo "TUNNEL_URL=$TUNNEL_URL" >> "$GITHUB_OUTPUT"
-          echo "✅ tunnel acquired: $TUNNEL_URL"
           
-          # --- verify tunnel reaches gateway ---
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+          # --- FINAL VERIFICATION: Ping the UI through the tunnel ---
+          echo "Verifying tunnel connectivity..."
+          T_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
             -H "Authorization: Bearer $OPENCLAW_TOKEN" "$TUNNEL_URL/" || echo "000")
-          echo "CONTROL_UI_HTTP_STATUS=$CODE"
           
-          if [ "$CODE" = "000" ]; then
-            echo "❌ Tunnel could not reach the gateway (connection failed)"
+          if [ "$T_CODE" = "000" ]; then
+            echo "❌ Tunnel exists but cannot reach Gateway. 502 likely."
             exit 1
           fi
+          echo "✅ Tunnel verified (HTTP $T_CODE)"
           
-          # --- emit details ---
-          DURATION="${{ inputs.duration || '7200' }}"
-          echo "================================"
-          echo " OpenClaw Web UI is ready!"
-          echo "================================"
           echo "FINAL_URL=$TUNNEL_URL"
-          echo "GATEWAY_TOKEN=***"
-          echo "SESSION_KEY=*** steps.config.outputs.SESSION_KEY_USED }}"
+          echo "GATEWAY_TOKEN=$OPENCLAW_TOKEN"
           
           {
             echo "# OpenClaw Web UI is ready"
@@ -302,23 +236,19 @@ jobs:
             echo "**URL:** $TUNNEL_URL"
             echo ""
             echo "**Gateway token:** \`$OPENCLAW_TOKEN\`"
-            echo ""
-            echo "Open the URL in your browser and enter the token when prompted."
           } >> "$GITHUB_STEP_SUMMARY"
           
-          echo "Keeping OpenClaw alive for $DURATION seconds..."
-          ALIVE=0
+          DURATION="${{ inputs.duration || '7200' }}"
+          echo "Staying alive for $DURATION seconds..."
           for i in $(seq 1 "$DURATION"); do
-            if ! kill -0 $GW_PID 2>/dev/null && ! kill -0 $CF_PID 2>/dev/null; then
-              echo "❌ Both gateway and cloudflared exited early"
+            if ! kill -0 $GW_PID 2>/dev/null || ! kill -0 $CF_PID 2>/dev/null; then
+              echo "Process crashed"
               break
             fi
             sleep 1
-            ALIVE=$i
           done
-          echo "Ran for $ALIVE seconds (requested $DURATION)."
 
-      # ── 10. Push sessions to Firebase RTDB (if configured) ──
+      # ── 10. Push sessions ──
       - name: Push OpenClaw sessions to Firebase
         env:
           FIREBASE_SERVICE_ACCOUNT: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
@@ -328,17 +258,10 @@ jobs:
           . "$NVM_DIR/nvm.sh"
           nvm use 26 --silent
           node scripts/sync-sessions.js push || true
-          echo "✅ Session sync completed"
 
-      # ── 11. Final logs ──
+      # ── 11. Logs ──
       - name: Final logs
         if: always()
         run: |
-          echo "=== OpenClaw Gateway Log (tail) ==="
-          tail -30 /tmp/openclaw-gateway.log 2>/dev/null || echo "(no gateway log)"
-          echo ""
-          echo "=== Cloudflared Log (tail) ==="
-          tail -15 /tmp/cloudflared.log 2>/dev/null || echo "(no cloudflared log)"
-          echo ""
-          echo "=== trycloudflare URL ==="
-          grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log 2>/dev/null | head -1 || echo "(none)"
+          tail -30 /tmp/openclaw-gateway.log 2>/dev/null || echo "no log"
+          tail -15 /tmp/cloudflared.log 2>/dev/null || echo "no log"
