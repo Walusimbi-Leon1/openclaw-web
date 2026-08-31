@@ -43,7 +43,9 @@ jobs:
           . "$NVM_DIR/nvm.sh"
           nvm use 26 --silent
           npm install -g openclaw@latest
-          openclaw plugins enable --accept-capabilities
+          # The 'openclaw plugins enable' command requires a specific plugin ID.
+          # To accept all default capabilities for the current version, we use:
+          openclaw plugins accept-all
           NODE_BIN="$(dirname "$(command -v node)")"
           echo "$NODE_BIN" >> "$GITHUB_PATH"
 
