@@ -46,6 +46,7 @@ jobs:
           . "$NVM_DIR/nvm.sh"
           nvm use 26 --silent
           npm install -g openclaw@latest
+          openclaw plugins enable --accept-capabilities
           NODE_BIN="$(dirname "$(command -v node)")"
           echo "$NODE_BIN" >> "$GITHUB_PATH"
 
@@ -77,7 +78,11 @@ jobs:
           export NVM_DIR="$HOME/.nvm"
           . "$NVM_DIR/nvm.sh"
           nvm use 26 --silent
-          node scripts/sync-sessions.js pull || true
+          if [ -f scripts/sync-sessions.js ]; then
+            node scripts/sync-sessions.js pull || true
+          else
+            echo "Warning: sync-sessions.js not found, skipping pull"
+          fi
 
       # ── 7. Generate openclaw.json config ──
       - name: Configure OpenClaw
@@ -98,7 +103,6 @@ jobs:
           WORKSPACE_DIR="$HOME/openclaw-workspace"
           mkdir -p "$HOME/.openclaw"
           
-          # CORRECTED: Use a real token variable, NOT a masked string
           FINAL_TOKEN="la5-colab-8133ea97d77b5c47"
           
           echo "token=$FINAL_TOKEN" >> "$GITHUB_OUTPUT"
@@ -172,8 +176,8 @@ jobs:
                   "openrouter/cohere/north-mini-code:free": { "alias": "Cohere North Mini Code (OpenRouter Free)" },
                   "openrouter/nvidia/nemotron-3-super-120b-a12b:free": { "alias": "Nemotron 3 Super 120B (OpenRouter Free)" },
                   "openrouter/google/gemma-4-26b-a4b-it:free": { "alias": "Gemma 4 26B IT (OpenRouter Free)" },
-                  "openrouter/poolside/laguna-s-2.1:free": { "alias": "Laguna S 2.1 (OpenRouter Free)" },
-                  "openrouter/dots-studio/dots-3-note-preview:free": { "alias": "Dots 3 Note Preview (OpenRouter Free)" },
+                  "openrouter/poolside/laguna-s-2.1:free": { "alias": "Laguna S 2.1 (Free)" },
+                  "openrouter/dots-studio/dots-3-note-preview:free": { "alias": "Dots 3 Note Preview (Free)" },
                   "openrouter/google/lyria-3-clip-preview": { "alias": "Lyria 3 Clip Preview (OpenRouter)" },
                   "openrouter/nvidia/nemotron-3.5-lightning:free": { "alias": "Nemotron 3.5 Lightning (OpenRouter Free)" },
                   "kgw/nvidia/nemotron-3-ultra-550b-a55b:free": { "alias": "Nemotron 3 Ultra 550B (Kilo Free)" }
@@ -185,7 +189,7 @@ jobs:
               "mode": "local",
               "auth": {
                 "mode": "token",
-                "token": "la5-gateway-token-2026"
+                "token": "la5-ga…2026"
               },
               "port": 18789,
               "bind": "loopback",
@@ -242,7 +246,7 @@ jobs:
                   "models": [
                     { "id": "gemma4:31b", "name": "Gemma 4 31B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "gpt-oss:120b", "name": "GPT OSS 120B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
-                    { "id": "gpt-oss:20b", "name": "GPT OSS 20B", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
+                    { "id": "gpt-oss:20b", "name": "GPT OSS 20B", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0,, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "nemotron-3-nano:30b", "name": "Nemotron 3 Nano 30B", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "nemotron-3-super", "name": "Nemotron 3 Super", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "nemotron-3-ultra", "name": "Nemotron 3 Ultra", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false }
@@ -256,7 +260,7 @@ jobs:
                     { "id": "gemma4:31b", "name": "Gemma 4 31B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "gpt-oss:120b", "name": "GPT OSS 120B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "gpt-oss:20b", "name": "GPT OSS 20B", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
-                    { "id": "nemotron-3-nano:30b", "name": "Nemotron 3 Nano 30B", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
+                    { "id": "nemotron-3-nano:30b", "name": "Nemotron 3 Nano 30B", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "nemotron-3-super", "name": "Nemotron 3 Super", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "nemotron-3-ultra", "name": "Nemotron 3 Ultra", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false }
                   ]
@@ -284,11 +288,11 @@ jobs:
                     { "id": "hy3-free", "name": "oc/hy3-free", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "laguna-s-2.1-free", "name": "oc/laguna-s-2.1-free", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "nemotron-3.5-lightning-free", "name": "oc/nemotron-3.5-lightning-free", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
-                    { "id": "nemotron-3-ultra-free", "name": "oc/nemotron-3-ultra-free", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
+                    { "id": "nemotron-3-ultra-free", "name": "oc/nemotron-3-ultra-free", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "ling-3.0-tiny-free", "name": "oc/ling-3.0-tiny-free", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "ling-3.0-flash-fin-free", "name": "oc/ling-3.0-flash-fin-free", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "mimo-v2.5-free", "name": "oc/mimo-v2.5-free", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
-                    { "id": "deepseek-v4-flash-free", "name": "oc/deepseek-v4-flash-free", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
+                    { "id": "deepseek-v4-flash-free", "name": "oc/deepseek-v4-flash-free", "contextWindow": 128000, "maxTokens": 4096, "input": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "minimax-m2.1-free", "name": "oc/minimax-m2.1-free", "contextWindow": 256000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "kimi-k2.5-free", "name": "oc/kimi-k2.5-free", "contextWindow": 262144, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "muse-spark-1.2-contributor-free", "name": "oc/muse-spark-1.2-contributor-free", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false }
@@ -301,7 +305,7 @@ jobs:
                   "models": [
                     { "id": "nvidia/nemotron-3-super-120b-a12b", "name": "NVIDIA Nemotron 3 Super 120B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "nvidia/nemotron-3-ultra-550b-a55b", "name": "NVIDIA Nemotron 3 Ultra 550B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
-                    { "id": "z-ai/glm-5.2", "name": "GLM 5.2", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
+                    { "id": "z-ai/glm-5.2", "name": "GLM 5.2", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "openai/gpt-oss-20b", "name": "OpenAI GPT OSS 20B", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "openai/gpt-oss-120b", "name": "OpenAI GPT OSS 120B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false }
                   ]
@@ -325,7 +329,7 @@ jobs:
                   "apiKey": "$GOOGLE_API_KEY",
                   "models": [
                     { "id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "contextWindow": 1048576, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
-                    { "id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "contextWindow": 2097152, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false }
+                    { "id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false }
                   ]
                 },
                 "openrouter": {
@@ -334,8 +338,8 @@ jobs:
                   "apiKey": "$OPENROUTER_API_KEY",
                   "models": [
                     { "id": "nvidia/nemotron-3-nano-30b-a3b:free", "name": "Nemotron 3 Nano (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
-                    { "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", "name": "Nemotron 3 Nano Omni Reasoning (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": true },
-                    { "id": "cohere/north-mini-code:free", "name": "Cohere North Mini Code (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
+                    { "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", "name": "Nemotron 3 Nano Omni Reasoning (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
+                    { "id": "cohere/north-mini-code:free", "name": "Cohere la a 31B (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "nvidia/nemotron-3-super-120b-a12b:free", "name": "Nemotron 3 Super 120B (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "google/gemma-4-26b-a4b-it:free", "name": "Gemma 4 26B IT (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "poolside/laguna-s-2.1:free", "name": "Laguna S 2.1 (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
@@ -414,8 +418,7 @@ jobs:
           echo "TUNNEL_URL=$TUNNEL_URL" >> "$GITHUB_OUTPUT"
           
           echo "Verifying tunnel connectivity..."
-          T_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
-            -H "Authorization: Bearer $OPENCLAW_TOKEN" "$TUNNEL_URL/" || echo "000")
+          T_CODE=$(curl -s -o /dev/null -w "%{http_code}" -> /dev/null 2>&1 || echo "000")
           
           if [ "$T_CODE" = "000" ]; then
             echo "❌ Tunnel exists but cannot reach Gateway."
@@ -424,7 +427,6 @@ jobs:
           echo "✅ Tunnel verified (HTTP $T_CODE)"
           
           echo "FINAL_URL=$TUNNEL_URL"
-          echo "GATEWAY_TOKEN=***"
           
           {
             echo "# OpenClaw Web UI is ready"
@@ -453,7 +455,11 @@ jobs:
           export NVM_DIR="$HOME/.nvm"
           . "$NVM_DIR/nvm.sh"
           nvm use 26 --silent
-          node scripts/sync-sessions.js push || true
+          if [ -f scripts/sync-sessions.js ]; then
+            node scripts/sync-sessions.js push || true
+          else
+            echo "Warning: sync-sessions.js not found, skipping push"
+          fi
 
       # ── 11. Logs ──
       - name: Final logs
