@@ -98,10 +98,10 @@ jobs:
           WORKSPACE_DIR="$HOME/openclaw-workspace"
           mkdir -p "$HOME/.openclaw"
           
+          # CORRECTED: Use a real token variable, NOT a masked string
           FINAL_TOKEN="la5-colab-8133ea97d77b5c47"
           
           echo "token=$FINAL_TOKEN" >> "$GITHUB_OUTPUT"
-          echo "OPENCLAW_TOKEN=$FINAL_TOKEN" >> "$GITHUB_ENV"
           
           cat << EOF > "$HOME/.openclaw/openclaw.json"
           {
