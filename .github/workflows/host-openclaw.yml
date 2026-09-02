@@ -98,12 +98,12 @@ jobs:
           WORKSPACE_DIR="$HOME/openclaw-workspace"
           mkdir -p "$HOME/.openclaw"
           
-          FINAL_TOKEN="***"
+          FINAL_TOKEN="la5-web-$(openssl rand -hex 4)"
           
           echo "token=$FINAL_TOKEN" >> "$GITHUB_OUTPUT"
-          echo "OPENCLAW_TOKEN=***" >> "$GITHUB_ENV"
+          echo "OPENCLAW_TOKEN=$FINAL_TOKEN" >> "$GITHUB_ENV"
           
-          cat << 'EOF' > "$HOME/.openclaw/openclaw.json"
+          cat << 'INNER_EOF' > "$HOME/.openclaw/openclaw.json"
           {
             "agents": {
               "defaults": {
@@ -185,7 +185,7 @@ jobs:
               "mode": "local",
               "auth": {
                 "mode": "token",
-                "token": "***"
+                "token": "TOKEN_PLACEHOLDER"
               },
               "port": 18789,
               "bind": "loopback",
@@ -205,7 +205,7 @@ jobs:
                 "ollama": {
                   "baseUrl": "https://ollama.com/v1",
                   "api": "openai-completions",
-                  "apiKey": "***}",
+                  "apiKey": "OLLAMA_KEY_PLACEHOLDER",
                   "models": [
                     { "id": "gemma4:31b", "name": "Gemma 4 31B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "gpt-oss:120b", "name": "GPT OSS 120B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
@@ -218,7 +218,7 @@ jobs:
                 "ollama2": {
                   "baseUrl": "https://ollama.com/v1",
                   "api": "openai-completions",
-                  "apiKey": "***}",
+                  "apiKey": "OLLAMA_KEY_PLACEHOLDER",
                   "models": [
                     { "id": "gemma4:31b", "name": "Gemma 4 31B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "gpt-oss:120b", "name": "GPT OSS 120B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
@@ -231,7 +231,7 @@ jobs:
                 "ollama3": {
                   "baseUrl": "https://ollama.com/v1",
                   "api": "openai-completions",
-                  "apiKey": "***}",
+                  "apiKey": "OLLAMA_KEY_PLACEHOLDER",
                   "models": [
                     { "id": "gemma4:31b", "name": "Gemma 4 31B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "gpt-oss:120b", "name": "GPT OSS 120B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
@@ -244,7 +244,7 @@ jobs:
                 "ollama4": {
                   "baseUrl": "https://ollama.com/v1",
                   "api": "openai-completions",
-                  "apiKey": "***}",
+                  "apiKey": "OLLAMA_KEY_PLACEHOLDER",
                   "models": [
                     { "id": "gemma4:31b", "name": "Gemma 4 31B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "gpt-oss:120b", "name": "GPT OSS 120B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
@@ -257,7 +257,7 @@ jobs:
                 "ollama5": {
                   "baseUrl": "https://ollama.com/v1",
                   "api": "openai-completions",
-                  "apiKey": "***}",
+                  "apiKey": "OLLAMA_KEY_PLACEHOLDER",
                   "models": [
                     { "id": "gemma4:31b", "name": "Gemma 4 31B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "gpt-oss:120b", "name": "GPT OSS 120B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
@@ -279,7 +279,7 @@ jobs:
                 "nvidia-nemotron": {
                   "baseUrl": "https://integrate.api.nvidia.com/v1",
                   "api": "openai-completions",
-                  "apiKey": "***}",
+                  "apiKey": "NVIDIA_KEY_PLACEHOLDER",
                   "models": [
                     { "id": "nvidia/nemotron-3-super-120b-a12b", "name": "NVIDIA Nemotron 3 Super 120B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "nvidia/nemotron-3-ultra-550b-a55b", "name": "NVIDIA Nemotron 3 Ultra 550B", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
@@ -291,7 +291,7 @@ jobs:
                 "groq": {
                   "baseUrl": "https://api.groq.com/openai/v1",
                   "api": "openai-completions",
-                  "apiKey": "***}",
+                  "apiKey": "GROQ_KEY_PLACEHOLDER",
                   "models": [
                     { "id": "llama-3.1-8b-instant", "name": "Llama 3.1 8B Instant", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "llama-3.3-70b-versatile", "name": "Llama 3.3 70B Versatile", "contextWindow": 128000, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
@@ -304,7 +304,7 @@ jobs:
                 "google": {
                   "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
                   "api": "openai-completions",
-                  "apiKey": "***}",
+                  "apiKey": "GOOGLE_KEY_PLACEHOLDER",
                   "models": [
                     { "id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "contextWindow": 1048576, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "contextWindow": 2097152, "maxTokens": 8192, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false }
@@ -331,6 +331,7 @@ jobs:
             }
           }
           EOF
+          sed -i "s/TOKEN_PLACEHOLDER/$FINAL_TOKEN/" "$HOME/.openclaw/openclaw.json"
           
           python3 -c "import json; json.load(open('$HOME/.openclaw/openclaw.json')); print('Config OK')"
 
@@ -346,20 +347,15 @@ jobs:
         id: run
         env:
           OPENCLAW_TOKEN: '${{ steps.config.outputs.token }}'
-          CF_ACCOUNT_ID: '${{ secrets.CF_ACCOUNT_ID }}'
-          CF_API_TOKEN: '${{ secrets.CF_API_TOKEN }}'
-          OPENCODE_API_KEY: '${{ secrets.OPENCODE_API_KEY }}'
-          NVIDIA_API_KEY: '${{ secrets.NVIDIA_API_KEY }}'
-          GROQ_API_KEY: '${{ secrets.GROQ_API_KEY }}'
-          GOOGLE_API_KEY: '${{ secrets.GOOGLE_API_KEY }}'
-          OPENROUTER_API_KEY: '${{ secrets.OPENROUTER_API_KEY }}'
-          KILO_API_KEY: '${{ secrets.KILO_API_KEY }}'
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          KILO_API_KEY: ${{ secrets.KILO_API_KEY }}
         run: |
-          export NVM_DIR="$HOME/.nvm"
-          . "$NVM_DIR/nvm.sh"
-          nvm use 26 --silent
-          
-          NVM_SH="$HOME/.nvm/nvm.sh"
           
           echo "Starting OpenClaw gateway..."
           nohup bash -c "source $NVM_SH && nvm use 26 --silent && openclaw gateway run --port 18789 --bind loopback" > /tmp/openclaw-gateway.log 2>&1 &
