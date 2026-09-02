@@ -103,7 +103,7 @@ jobs:
           echo "token=$FINAL_TOKEN" >> "$GITHUB_OUTPUT"
           echo "OPENCLAW_TOKEN=***" >> "$GITHUB_ENV"
           
-          cat << 'EOF' > "$HOME/.openclaw/openclaw.json"
+          cat << EOF > "$HOME/.openclaw/openclaw.json"
           {
             "agents": {
               "defaults": {
@@ -270,7 +270,7 @@ jobs:
                 "opencode-ai": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "${OPENCODE_API_KEY}",
+                  "apiKey": "${OPEN…_KEY}",
                   "timeoutSeconds": 86400,
                   "models": [
                     { "id": "big-pickle", "name": "big-pickle", "contextWindow": 200000, "maxTokens": 16384, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false }
@@ -313,7 +313,7 @@ jobs:
                 "openrouter": {
                   "baseUrl": "https://openrouter.ai/api/v1",
                   "api": "openai-completions",
-                  "apiKey": "${OPENROUTER_API_KEY}",
+                  "apiKey": "${OPEN…_KEY}",
                   "models": [
                     { "id": "nvidia/nemotron-3-nano-30b-a3b:free", "name": "Nemotron 3 Nano (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", "name": "Nemotron 3 Nano Omni Reasoning (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": true },
@@ -322,9 +322,9 @@ jobs:
                     { "id": "google/gemma-4-26b-a4b-it:free", "name": "Gemma 4 26B IT (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "poolside/laguna-s-2.1:free", "name": "Laguna S 2.1 (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "dots-studio/dots-3-note-preview:free", "name": "Dots 3 Note Preview (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
-                    { "id": "google/lyria-3-clip-preview", "name": "Lyria 3 Clip Preview (OpenRouter)" },
-                    { "id": "nvidia/nemotron-3.5-lightning:free", "name": "Nemotron 3.5 Lightning (OpenRouter Free)" },
-                    { "id": "kgw/nvidia/nemotron-3-ultra-550b-a55b:free", "name": "Nemotron 3 Ultra 550B (Kilo Free)" }
+                    { "id": "google/lyria-3-clip-preview", "alias": "Lyria 3 Clip Preview (OpenRouter)" },
+                    { "id": "nvidia/nemotron-3.5-lightning:free", "alias": "Nemotron 3.5 Lightning (OpenRouter Free)" },
+                    { "id": "kgw/nvidia/nemotron-3-ultra-550b-a55b:free", "alias": "Nemotron 3 Ultra 550B (Kilo Free)" }
                   ]
                 }
               }
@@ -348,17 +348,7 @@ jobs:
           OPENCLAW_TOKEN: '${{ steps.config.outputs.token }}'
           CF_ACCOUNT_ID: '${{ secrets.CF_ACCOUNT_ID }}'
           CF_API_TOKEN: '${{ secrets.CF_API_TOKEN }}'
-          OPENCODE_API_KEY: '${{ secrets.OPENCODE_API_KEY }}'
-          NVIDIA_API_KEY: '${{ secrets.NVIDIA_API_KEY }}'
-          GROQ_API_KEY: '${{ secrets.GROQ_API_KEY }}'
-          GOOGLE_API_KEY: '${{ secrets.GOOGLE_API_KEY }}'
-          OPENROUTER_API_KEY: '${{ secrets.OPENROUTER_API_KEY }}'
-          KILO_API_KEY: '${{ secrets.KILO_API_KEY }}'
         run: |
-          export NVM_DIR="$HOME/.nvm"
-          . "$NVM_DIR/nvm.sh"
-          nvm use 26 --silent
-          
           NVM_SH="$HOME/.nvm/nvm.sh"
           
           echo "Starting OpenClaw gateway..."
