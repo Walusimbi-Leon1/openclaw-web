@@ -270,7 +270,7 @@ jobs:
                 "opencode-ai": {
                   "baseUrl": "https://opencode.ai/zen/v1",
                   "api": "openai-completions",
-                  "apiKey": "${OPEN…_KEY}",
+                  "apiKey": "${OPENCODE_API_KEY}",
                   "timeoutSeconds": 86400,
                   "models": [
                     { "id": "big-pickle", "name": "big-pickle", "contextWindow": 200000, "maxTokens": 16384, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false }
@@ -313,7 +313,7 @@ jobs:
                 "openrouter": {
                   "baseUrl": "https://openrouter.ai/api/v1",
                   "api": "openai-completions",
-                  "apiKey": "${OPEN…_KEY}",
+                  "apiKey": "${OPENROUTER_API_KEY}",
                   "models": [
                     { "id": "nvidia/nemotron-3-nano-30b-a3b:free", "name": "Nemotron 3 Nano (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", "name": "Nemotron 3 Nano Omni Reasoning (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": true },
@@ -322,9 +322,9 @@ jobs:
                     { "id": "google/gemma-4-26b-a4b-it:free", "name": "Gemma 4 26B IT (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "poolside/laguna-s-2.1:free", "name": "Laguna S 2.1 (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
                     { "id": "dots-studio/dots-3-note-preview:free", "name": "Dots 3 Note Preview (Free)", "contextWindow": 128000, "maxTokens": 4096, "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }, "reasoning": false },
-                    { "id": "google/lyria-3-clip-preview", "alias": "Lyria 3 Clip Preview (OpenRouter)" },
-                    { "id": "nvidia/nemotron-3.5-lightning:free", "alias": "Nemotron 3.5 Lightning (OpenRouter Free)" },
-                    { "id": "kgw/nvidia/nemotron-3-ultra-550b-a55b:free", "alias": "Nemotron 3 Ultra 550B (Kilo Free)" }
+                    { "id": "google/lyria-3-clip-preview", "name": "Lyria 3 Clip Preview (OpenRouter)" },
+                    { "id": "nvidia/nemotron-3.5-lightning:free", "name": "Nemotron 3.5 Lightning (OpenRouter Free)" },
+                    { "id": "kgw/nvidia/nemotron-3-ultra-550b-a55b:free", "name": "Nemotron 3 Ultra 550B (Kilo Free)" }
                   ]
                 }
               }
