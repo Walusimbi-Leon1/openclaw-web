@@ -103,7 +103,7 @@ jobs:
           echo "token=$FINAL_TOKEN" >> "$GITHUB_OUTPUT"
           echo "OPENCLAW_TOKEN=***" >> "$GITHUB_ENV"
           
-          cat << EOF > "$HOME/.openclaw/openclaw.json"
+          cat << 'EOF' > "$HOME/.openclaw/openclaw.json"
           {
             "agents": {
               "defaults": {
